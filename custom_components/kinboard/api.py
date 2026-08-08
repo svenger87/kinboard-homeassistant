@@ -124,7 +124,16 @@ class KinboardClient:
         a fixed interval, and eight requests where one would do is eight times
         the load on a self-hosted stack that may be a Raspberry Pi.
         """
-        return await self._request("GET", "/family/summary")
+        payload = await self._request("GET", "/family/summary")
+        # The endpoint wraps the sensor values: {summary, generated_at, today,
+        # tomorrow}. Entities read `shopping_items` and friends straight off
+        # coordinator.data, so the envelope is unwrapped here rather than in
+        # every entity. Returning the envelope left every sensor unavailable —
+        # found on the first real setup, because nothing below this line has an
+        # opinion about the shape.
+        if isinstance(payload, dict) and isinstance(payload.get("summary"), dict):
+            return payload["summary"]
+        return payload if isinstance(payload, dict) else {}
 
     async def async_get_calendar_events(
         self, start: datetime, end: datetime

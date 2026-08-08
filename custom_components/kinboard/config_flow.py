@@ -10,6 +10,7 @@ work out for themselves, so each gets its own message.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import voluptuous as vol
@@ -26,6 +27,21 @@ from .api import (
 from .const import CONF_BASE_URL, CONF_TOKEN, DOMAIN, MIN_KINBOARD_VERSION
 
 _LOGGER = logging.getLogger(__name__)
+
+def _core_version(raw: str) -> AwesomeVersion:
+    """The numeric core of a version, with any pre-release suffix removed.
+
+    Semver sorts a pre-release BEFORE its release, so `1.9.0-rc.1 < 1.9.0` is
+    true — and comparing raw versions therefore rejected release candidates of
+    the very version being required. That is exactly backwards: the people
+    running an rc are the testers, and the API they need landed before the rc
+    was cut.
+
+    Found by installing this into a real Home Assistant against Kinboard
+    1.9.0-rc.1, which refused with "unsupported_version".
+    """
+    return AwesomeVersion(re.split(r"[-+]", raw.strip(), maxsplit=1)[0])
+
 
 STEP_USER_SCHEMA = vol.Schema(
     {
@@ -65,7 +81,7 @@ class KinboardConfigFlow(ConfigFlow, domain=DOMAIN):
             return None, "unknown"
 
         version = info.get("version")
-        if version and AwesomeVersion(version) < AwesomeVersion(MIN_KINBOARD_VERSION):
+        if version and _core_version(version) < AwesomeVersion(MIN_KINBOARD_VERSION):
             return None, "unsupported_version"
 
         scopes = set(info.get("scopes") or [])

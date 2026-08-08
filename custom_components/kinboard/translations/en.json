@@ -4,12 +4,17 @@
       "user": {
         "title": "Connect to Kinboard",
         "description": "Enter the address of your Kinboard instance and an integration token. Create the token in Kinboard under Settings → Integrations. It is shown only once.",
-        "data": { "base_url": "Kinboard address", "token": "Integration token" }
+        "data": {
+          "base_url": "Kinboard address",
+          "token": "Integration token"
+        }
       },
       "reauth_confirm": {
         "title": "Kinboard token no longer accepted",
         "description": "The token for {base_url} was revoked, rotated or has expired. Create a new one in Kinboard under Settings → Integrations.",
-        "data": { "token": "Integration token" }
+        "data": {
+          "token": "Integration token"
+        }
       }
     },
     "error": {
@@ -22,6 +27,44 @@
     "abort": {
       "already_configured": "This Kinboard family is already set up.",
       "reauth_successful": "Kinboard reconnected."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "next_family_event": {
+        "name": "Next family event"
+      },
+      "events_today": {
+        "name": "Events today"
+      },
+      "shopping_items": {
+        "name": "Shopping items"
+      },
+      "meal_today": {
+        "name": "Meal today"
+      },
+      "tasks_due": {
+        "name": "Tasks due"
+      },
+      "school_tomorrow": {
+        "name": "School tomorrow"
+      },
+      "birthdays_upcoming": {
+        "name": "Next birthday"
+      },
+      "display_mode": {
+        "name": "Display mode"
+      }
+    },
+    "binary_sensor": {
+      "attention_required": {
+        "name": "Attention required"
+      }
+    },
+    "calendar": {
+      "family": {
+        "name": "Family calendar"
+      }
     }
   }
 }

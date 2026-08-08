@@ -40,7 +40,15 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     async_add_entities(
-        [KinboardTodoList(entry.runtime_data, list_id, name) for list_id, name in TODO_LISTS.items()],
+        [
+            KinboardTodoList(
+                entry.runtime_data,
+                list_id,
+                str(spec["name"]),
+                bool(spec["supports_due"]),
+            )
+            for list_id, spec in TODO_LISTS.items()
+        ],
         # Fetch before the entity is first shown, so it does not appear empty
         # and then fill in.
         True,
@@ -81,15 +89,23 @@ def _parse_date(value: str):
 class KinboardTodoList(KinboardEntity, TodoListEntity):
     """One Kinboard list."""
 
-    _attr_supported_features = (
-        TodoListEntityFeature.CREATE_TODO_ITEM
-        | TodoListEntityFeature.UPDATE_TODO_ITEM
-        | TodoListEntityFeature.DELETE_TODO_ITEM
-    )
-
-    def __init__(self, coordinator, list_id: str, name: str) -> None:
+    def __init__(self, coordinator, list_id: str, name: str, supports_due: bool) -> None:
         super().__init__(coordinator, f"todo_{list_id}")
         self._list_id = list_id
+
+        # Declared per list, not globally. Home Assistant validates a service
+        # call against these before the entity is asked to do anything, so a
+        # list that claims a due date it cannot store would accept the call and
+        # then lose the date — and one that omits a date it CAN store gets the
+        # whole call rejected, which is what happened to tasks.
+        features = (
+            TodoListEntityFeature.CREATE_TODO_ITEM
+            | TodoListEntityFeature.UPDATE_TODO_ITEM
+            | TodoListEntityFeature.DELETE_TODO_ITEM
+        )
+        if supports_due:
+            features |= TodoListEntityFeature.SET_DUE_DATE_ON_ITEM
+        self._attr_supported_features = features
         # Named directly rather than through a translation key: these are
         # "Shopping list" and "Tasks", and a translation file for two strings
         # that never vary by family is more indirection than it is worth.
@@ -139,8 +155,10 @@ class KinboardTodoList(KinboardEntity, TodoListEntity):
             patch["status"] = (
                 "completed" if item.status == TodoItemStatus.COMPLETED else "needs_action"
             )
-        # `due` is sent even when None, because clearing a date is a change a
-        # user can make and an absent key would mean "leave it alone".
+        # Sent even when None, because clearing a date is a change a user can
+        # make and an absent key would mean "leave it alone". The server
+        # accepts a null on a list without a due date as a no-op, so this is
+        # uniform across both lists.
         patch["due"] = item.due.isoformat() if item.due else None
 
         try:

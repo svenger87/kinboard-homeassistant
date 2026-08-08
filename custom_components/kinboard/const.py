@@ -55,9 +55,18 @@ BINARY_SENSOR_ATTENTION_REQUIRED: Final = "attention_required"
 CALENDAR_FAMILY: Final = "family"
 
 # The two lists Kinboard exposes as to-do lists. Names match the API path.
-TODO_LISTS: Final[dict[str, str]] = {
-    "shopping": "Shopping list",
-    "tasks": "Tasks",
+#
+# `supports_due` mirrors the server's own list description (todos have a
+# due_date column, shopping_items does not) and has to be declared here rather
+# than discovered, because Home Assistant validates a service call against an
+# entity's supported features BEFORE the entity is asked to do anything — so
+# the answer must exist at construction, before any fetch.
+#
+# Getting this wrong is not a soft failure: adding a task with a due date was
+# rejected with `update_field_not_supported` and the item was never created.
+TODO_LISTS: Final[dict[str, dict[str, object]]] = {
+    "shopping": {"name": "Shopping list", "supports_due": False},
+    "tasks": {"name": "Tasks", "supports_due": True},
 }
 
 # --------------------------------------------------------------------------

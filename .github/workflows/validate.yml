@@ -20,6 +20,22 @@ jobs:
   hacs:
     name: HACS
     runs-on: ubuntu-latest
+    # Only meaningful once the repository is public.
+    #
+    # Measured on the first run against the private repo: every metadata check
+    # passed (license, description, archived, issues, information) and every
+    # check that has to read a file failed — hacs.json and the integration
+    # manifest both came back as "None". HACS fetches file content over paths
+    # that are not authorised for a private repository, so those failures say
+    # nothing about the code.
+    #
+    # The brands check additionally needs the integration listed in
+    # home-assistant/brands, which is a submission made when going public.
+    #
+    # Leaving the job permanently red would train us to ignore it, so it is
+    # gated instead. Flipping the repository to public turns it on with no
+    # edit here.
+    if: ${{ !github.event.repository.private }}
     steps:
       - uses: actions/checkout@v4
       - uses: hacs/action@main

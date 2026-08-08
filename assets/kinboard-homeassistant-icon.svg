@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Kinboard Home Assistant integration icon</title>
+  <desc id="desc">A Kinboard house containing a connected K monogram.</desc>
+  <defs>
+    <linearGradient id="house" x1="72" y1="438" x2="430" y2="92" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#071f3d"/>
+      <stop offset="1" stop-color="#0d4f96"/>
+    </linearGradient>
+    <linearGradient id="roof" x1="82" y1="182" x2="429" y2="166" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1769e0"/>
+      <stop offset="1" stop-color="#00bed1"/>
+    </linearGradient>
+    <linearGradient id="link" x1="172" y1="152" x2="330" y2="365" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f8fbff"/>
+      <stop offset="1" stop-color="#d9f8f2"/>
+    </linearGradient>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="13" flood-color="#02142b" flood-opacity=".24"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <path d="M67 211c0-17 8-34 22-44L221 63c21-16 49-16 70 0l132 104c14 10 22 27 22 44v213c0 19-15 34-34 34H101c-19 0-34-15-34-34V211Z" fill="url(#house)"/>
+    <path d="M74 211 224 93c19-15 45-15 64 0l150 118" fill="none" stroke="url(#roof)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M375 96v52" fill="none" stroke="#00bed1" stroke-width="22" stroke-linecap="round"/>
+  </g>
+
+  <g fill="none" stroke="url(#link)" stroke-width="42" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M174 174v169"/>
+    <path d="m184 266 115-98"/>
+    <path d="m184 266 126 94"/>
+  </g>
+
+  <g stroke="#072b55" stroke-width="11">
+    <circle cx="174" cy="174" r="28" fill="#f8fbff"/>
+    <circle cx="307" cy="163" r="28" fill="#00bed1"/>
+    <circle cx="318" cy="365" r="28" fill="#8de3d1"/>
+  </g>
+
+  <path d="M104 408h304" stroke="#42c9c4" stroke-width="8" stroke-linecap="round" opacity=".35"/>
+</svg>

@@ -1,3 +1,9 @@
+<div align="center">
+
+<img src="custom_components/kinboard/brand/logo.png" alt="Kinboard — Home Assistant integration" width="760">
+
+</div>
+
 # Kinboard for Home Assistant
 
 Makes [Kinboard](https://github.com/svenger87/kinboard) — a self-hosted family

@@ -41,7 +41,7 @@ What exists here today:
 | Config flow + reauth, with distinct errors | ✅ written |
 | Coordinator with a persisted event cursor | ✅ written |
 | Sensors, binary sensor, diagnostics | ✅ written |
-| `calendar.kinboard_family` | ❌ named in the contract, **not implemented** |
+| `calendar.kinboard_family` | ✅ implemented (needs Kinboard v1.9's `/calendar/events`) |
 | Tests | ❌ none yet |
 | Run against a real Home Assistant | ❌ **never** |
 

@@ -9,6 +9,7 @@ will need to reimplement in another language, so the surface stays small.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
 import aiohttp
@@ -124,6 +125,25 @@ class KinboardClient:
         the load on a self-hosted stack that may be a Raspberry Pi.
         """
         return await self._request("GET", "/family/summary")
+
+    async def async_get_calendar_events(
+        self, start: datetime, end: datetime
+    ) -> list[dict[str, Any]]:
+        """Calendar events overlapping a window.
+
+        Both bounds are sent explicitly because the server requires them — it
+        refuses to guess, on the grounds that "today" and "everything" are both
+        plausible defaults and differ enormously in cost.
+
+        Not served from the summary: a CalendarEntity is asked for whatever
+        window the user is looking at, which the summary never describes.
+        """
+        payload = await self._request(
+            "GET",
+            "/calendar/events",
+            params={"start": start.isoformat(), "end": end.isoformat()},
+        )
+        return payload.get("events", []) if isinstance(payload, dict) else []
 
     async def async_get_events(self, after_id: int | None = None) -> list[dict[str, Any]]:
         """Fetch domain events after a cursor.

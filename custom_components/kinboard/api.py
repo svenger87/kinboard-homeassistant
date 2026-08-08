@@ -165,6 +165,33 @@ class KinboardClient:
         payload = await self._request("GET", "/events", params=params)
         return payload.get("events", []) if isinstance(payload, dict) else []
 
+    # -- lists ------------------------------------------------------------
+
+    async def async_get_list(self, list_id: str) -> list[dict[str, Any]]:
+        """The items on a list, already in Home Assistant's shape."""
+        payload = await self._request("GET", f"/lists/{list_id}")
+        return payload.get("items", []) if isinstance(payload, dict) else []
+
+    async def async_add_list_item(
+        self, list_id: str, summary: str, due: str | None, idempotency_key: str
+    ) -> dict[str, Any] | None:
+        body: dict[str, Any] = {"summary": summary}
+        if due is not None:
+            body["due"] = due
+        return await self._request(
+            "POST", f"/lists/{list_id}", json=body, idempotency_key=idempotency_key
+        )
+
+    async def async_update_list_item(
+        self, list_id: str, item_id: str, patch: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        # No idempotency key: this addresses one row by id, so repeating it is
+        # already harmless. The server does not ask for one.
+        return await self._request("PATCH", f"/lists/{list_id}/{item_id}", json=patch)
+
+    async def async_delete_list_item(self, list_id: str, item_id: str) -> None:
+        await self._request("DELETE", f"/lists/{list_id}/{item_id}")
+
     # -- writes -----------------------------------------------------------
 
     async def async_call_service(

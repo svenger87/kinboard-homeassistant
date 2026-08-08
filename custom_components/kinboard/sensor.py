@@ -5,13 +5,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
+from homeassistant.components.sensor import (
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import KinboardConfigEntry
 from .const import (
     SENSOR_BIRTHDAYS_UPCOMING,
+    SENSOR_MEAL_TOMORROW,
+    SENSOR_POCKET_MONEY_PREFIX,
+    SENSOR_TASKS_OVERDUE,
     SENSOR_DISPLAY_MODE,
     SENSOR_EVENTS_TODAY,
     SENSOR_MEAL_TODAY,
@@ -52,15 +59,62 @@ SENSORS: tuple[KinboardSensorDescription, ...] = (
         key=SENSOR_BIRTHDAYS_UPCOMING, attribute_keys=("name", "days_remaining")
     ),
     KinboardSensorDescription(key=SENSOR_DISPLAY_MODE),
+    # Its own sensor rather than an attribute of tasks_due, so "something is
+    # overdue" is a trigger rather than a template.
+    KinboardSensorDescription(key=SENSOR_TASKS_OVERDUE),
+    KinboardSensorDescription(key=SENSOR_MEAL_TOMORROW, attribute_keys=("meal", "recipe_id")),
 )
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: KinboardConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    async_add_entities(
-        KinboardSensor(entry.runtime_data, description) for description in SENSORS
-    )
+    coordinator = entry.runtime_data
+    entities: list[SensorEntity] = [KinboardSensor(coordinator, d) for d in SENSORS]
+
+    # One pocket-money sensor per child. Created from the first poll rather
+    # than a fixed list, because how many children a family has is not
+    # something this integration should assume. A child added later appears
+    # after a restart — acceptable for something that changes about once.
+    for purse in (coordinator.data or {}).get(SENSOR_POCKET_MONEY_PREFIX) or []:
+        if isinstance(purse, dict) and purse.get("person_id"):
+            entities.append(KinboardPocketMoney(coordinator, purse["person_id"], purse.get("name") or "?"))
+
+    async_add_entities(entities)
+
+
+class KinboardPocketMoney(KinboardEntity, SensorEntity):
+    """One child's pocket money balance."""
+
+    _attr_state_class = SensorStateClass.TOTAL
+
+    def __init__(self, coordinator, person_id: str, name: str) -> None:
+        super().__init__(coordinator, f"{SENSOR_POCKET_MONEY_PREFIX}_{person_id}")
+        self._person_id = person_id
+        # Named after the child rather than translated: a person's name is not
+        # something to look up in a translation file.
+        self._attr_translation_key = None
+        self._attr_name = f"{name} pocket money"
+
+    def _row(self) -> dict[str, Any] | None:
+        for purse in (self.coordinator.data or {}).get(SENSOR_POCKET_MONEY_PREFIX) or []:
+            if isinstance(purse, dict) and purse.get("person_id") == self._person_id:
+                return purse
+        return None
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.last_update_success and self._row() is not None
+
+    @property
+    def native_value(self) -> Any:
+        row = self._row()
+        return row.get("balance") if row else None
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        row = self._row()
+        return row.get("currency") if row else None
 
 
 class KinboardSensor(KinboardEntity, SensorEntity):

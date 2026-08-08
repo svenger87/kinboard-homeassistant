@@ -37,7 +37,12 @@ from .const import (
 )
 from .coordinator import KinboardCoordinator
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.CALENDAR]
+PLATFORMS: list[Platform] = [
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+    Platform.CALENDAR,
+    Platform.TODO,
+]
 
 ALL_SERVICES = (
     SERVICE_ADD_SHOPPING_ITEM,

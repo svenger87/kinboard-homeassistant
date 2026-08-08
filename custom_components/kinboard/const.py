@@ -44,10 +44,21 @@ SENSOR_TASKS_DUE: Final = "tasks_due"
 SENSOR_SCHOOL_TOMORROW: Final = "school_tomorrow"
 SENSOR_BIRTHDAYS_UPCOMING: Final = "birthdays_upcoming"
 SENSOR_DISPLAY_MODE: Final = "display_mode"
+SENSOR_TASKS_OVERDUE: Final = "tasks_overdue"
+SENSOR_MEAL_TOMORROW: Final = "meal_tomorrow"
+
+# One sensor per child, so the key is a prefix rather than a whole key.
+SENSOR_POCKET_MONEY_PREFIX: Final = "pocket_money"
 
 BINARY_SENSOR_ATTENTION_REQUIRED: Final = "attention_required"
 
 CALENDAR_FAMILY: Final = "family"
+
+# The two lists Kinboard exposes as to-do lists. Names match the API path.
+TODO_LISTS: Final[dict[str, str]] = {
+    "shopping": "Shopping list",
+    "tasks": "Tasks",
+}
 
 # --------------------------------------------------------------------------
 # Services Home Assistant can call on Kinboard (RFC-001 section 5.2)

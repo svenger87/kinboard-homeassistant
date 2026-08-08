@@ -54,6 +54,12 @@
       },
       "display_mode": {
         "name": "Display mode"
+      },
+      "tasks_overdue": {
+        "name": "Tasks overdue"
+      },
+      "meal_tomorrow": {
+        "name": "Meal tomorrow"
       }
     },
     "binary_sensor": {

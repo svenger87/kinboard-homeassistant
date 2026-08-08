@@ -1,0 +1,48 @@
+# Service definitions. Names and fields are the contract frozen by RFC-001
+# section 5.2 — an automation written against them must keep working.
+
+add_shopping_item:
+  fields:
+    name:     { required: true,  selector: { text: } }
+    quantity: { required: false, selector: { text: } }
+    category: { required: false, selector: { text: } }
+
+create_task:
+  fields:
+    title:     { required: true,  selector: { text: } }
+    person_id: { required: false, selector: { text: } }
+    due_at:    { required: false, selector: { datetime: } }
+    priority:  { required: false, selector: { number: { min: 0, max: 100 } } }
+
+create_note:
+  fields:
+    text:       { required: true,  selector: { text: { multiline: true } } }
+    expires_at: { required: false, selector: { datetime: } }
+    color:      { required: false, selector: { text: } }
+
+show_announcement:
+  fields:
+    title:          { required: true,  selector: { text: } }
+    message:        { required: true,  selector: { text: { multiline: true } } }
+    severity:       { required: true,  selector: { select: { options: [info, warning, critical] } } }
+    duration:       { required: false, selector: { number: { min: 5, max: 3600, unit_of_measurement: s } } }
+    target_devices: { required: false, selector: { text: } }
+
+activate_context:
+  fields:
+    context_id: { required: true,  selector: { text: } }
+    duration:   { required: false, selector: { number: { min: 5, max: 86400, unit_of_measurement: s } } }
+
+dismiss_attention:
+  fields:
+    attention_id: { required: true, selector: { text: } }
+
+add_pocket_money:
+  fields:
+    person_id: { required: true, selector: { text: } }
+    amount:    { required: true, selector: { number: { min: -1000, max: 1000, step: 0.01 } } }
+    reason:    { required: true, selector: { text: } }
+
+refresh_integration:
+  fields:
+    integration_id: { required: true, selector: { text: } }

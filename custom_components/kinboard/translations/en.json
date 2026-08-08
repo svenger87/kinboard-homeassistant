@@ -1,0 +1,27 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Kinboard",
+        "description": "Enter the address of your Kinboard instance and an integration token. Create the token in Kinboard under Settings → Integrations. It is shown only once.",
+        "data": { "base_url": "Kinboard address", "token": "Integration token" }
+      },
+      "reauth_confirm": {
+        "title": "Kinboard token no longer accepted",
+        "description": "The token for {base_url} was revoked, rotated or has expired. Create a new one in Kinboard under Settings → Integrations.",
+        "data": { "token": "Integration token" }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach Kinboard at that address. Check the address and that the instance is running.",
+      "invalid_auth": "Kinboard rejected this token. Check it was copied in full and has not been revoked.",
+      "missing_scope": "This token cannot read family data. Recreate it with at least the family:read scope.",
+      "unsupported_version": "This Kinboard is older than 1.9.0 and does not provide the Integration API. Upgrade Kinboard first.",
+      "unknown": "Unexpected error. Check the Home Assistant log for details."
+    },
+    "abort": {
+      "already_configured": "This Kinboard family is already set up.",
+      "reauth_successful": "Kinboard reconnected."
+    }
+  }
+}

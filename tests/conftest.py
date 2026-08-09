@@ -81,7 +81,7 @@ def mock_client() -> AsyncMock:
     client.base_url = "http://kinboard.test"
     client.async_get_info.return_value = INFO
     client.async_get_summary.return_value = SUMMARY
-    client.async_get_events.return_value = []
+    client.async_get_events.return_value = {"events": [], "has_more": False}
     client.async_get_calendar_events.return_value = []
     client.async_get_list.return_value = []
     return client

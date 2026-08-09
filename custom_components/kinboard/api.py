@@ -154,16 +154,27 @@ class KinboardClient:
         )
         return payload.get("events", []) if isinstance(payload, dict) else []
 
-    async def async_get_events(self, after_id: int | None = None) -> list[dict[str, Any]]:
-        """Fetch domain events after a cursor.
+    async def async_get_events(self, after_id: int | None = None) -> dict[str, Any]:
+        """Fetch one page of domain events after a cursor.
 
         The cursor is the monotonic domain_events id (RFC-001 section 6.2), not
         a timestamp — timestamps collide under concurrency and cannot be
         compared reliably.
+
+        Returns the envelope rather than only the rows, because `has_more`
+        carries something the caller cannot reconstruct. The server caps a page
+        at 100 events and sets the flag to mean "come back immediately rather
+        than waiting for your next poll"; ignoring it meant a consumer that had
+        been offline for a few hours caught up at 100 events per minute.
         """
         params = {"after": after_id} if after_id is not None else None
         payload = await self._request("GET", "/events", params=params)
-        return payload.get("events", []) if isinstance(payload, dict) else []
+        if not isinstance(payload, dict):
+            return {"events": [], "has_more": False}
+        return {
+            "events": payload.get("events") or [],
+            "has_more": bool(payload.get("has_more")),
+        }
 
     # -- lists ------------------------------------------------------------
 

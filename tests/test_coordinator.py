@@ -28,7 +28,7 @@ async def test_known_events_reach_the_bus(hass, config_entry, mock_client):
     seen = []
     hass.bus.async_listen("kinboard_task_completed", lambda e: seen.append(e.data))
 
-    mock_client.async_get_events.return_value = [_event(1, task_id="t-42")]
+    mock_client.async_get_events.return_value = {"events": [_event(1, task_id="t-42")], "has_more": False}
     config_entry.add_to_hass(hass)
     with patch("custom_components.kinboard.KinboardClient", return_value=mock_client):
         assert await hass.config_entries.async_setup(config_entry.entry_id)
@@ -46,9 +46,9 @@ async def test_an_unknown_event_type_is_skipped_but_still_advances_the_cursor(
     permanently and stop every later event — which would make any Kinboard
     upgrade a breaking one.
     """
-    mock_client.async_get_events.return_value = [
+    mock_client.async_get_events.return_value = {"events": [
         _event(7, "kinboard_something_from_the_future")
-    ]
+    ], "has_more": False}
     config_entry.add_to_hass(hass)
     with patch("custom_components.kinboard.KinboardClient", return_value=mock_client):
         assert await hass.config_entries.async_setup(config_entry.entry_id)
@@ -56,7 +56,7 @@ async def test_an_unknown_event_type_is_skipped_but_still_advances_the_cursor(
 
     coordinator = config_entry.runtime_data
     mock_client.async_get_events.reset_mock()
-    mock_client.async_get_events.return_value = []
+    mock_client.async_get_events.return_value = {"events": [], "has_more": False}
     await coordinator.async_refresh()
 
     mock_client.async_get_events.assert_awaited_once_with(after_id=7)
@@ -64,7 +64,7 @@ async def test_an_unknown_event_type_is_skipped_but_still_advances_the_cursor(
 
 async def test_the_cursor_resumes_rather_than_replays(hass, config_entry, mock_client):
     """RFC-001 section 7: a restart of either system loses nothing."""
-    mock_client.async_get_events.return_value = [_event(3), _event(5), _event(4)]
+    mock_client.async_get_events.return_value = {"events": [_event(3), _event(5), _event(4)], "has_more": False}
     config_entry.add_to_hass(hass)
     with patch("custom_components.kinboard.KinboardClient", return_value=mock_client):
         assert await hass.config_entries.async_setup(config_entry.entry_id)
@@ -72,7 +72,7 @@ async def test_the_cursor_resumes_rather_than_replays(hass, config_entry, mock_c
 
     coordinator = config_entry.runtime_data
     mock_client.async_get_events.reset_mock()
-    mock_client.async_get_events.return_value = []
+    mock_client.async_get_events.return_value = {"events": [], "has_more": False}
     await coordinator.async_refresh()
 
     # The highest id seen, not the last one in the list.

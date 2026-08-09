@@ -34,6 +34,12 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# How many pages one poll will drain before leaving the rest for the next one.
+# At the server's cap of 100 events per page this is 5,000 events per minute,
+# enough to clear a long outage quickly, while still bounding a single cycle so
+# a server that always answered `has_more` could not loop forever.
+MAX_EVENT_PAGES_PER_CYCLE = 50
+
 
 class KinboardCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Keeps entity state fresh and forwards Kinboard events onto the bus."""
@@ -83,18 +89,49 @@ class KinboardCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return summary
 
     async def _pump_events(self) -> None:
-        try:
-            events = await self.client.async_get_events(after_id=self._cursor)
-        except KinboardError as err:
-            # Not fatal: entity state is still good, and the cursor has not
-            # moved, so nothing is lost. Next cycle retries from the same point.
-            _LOGGER.debug("Event fetch failed, will retry from cursor %s: %s", self._cursor, err)
-            return
+        for _ in range(MAX_EVENT_PAGES_PER_CYCLE):
+            try:
+                page = await self.client.async_get_events(after_id=self._cursor)
+            except KinboardError as err:
+                # Not fatal: entity state is still good, and the cursor has not
+                # moved, so nothing is lost. Next cycle retries from the same point.
+                _LOGGER.debug("Event fetch failed, will retry from cursor %s: %s", self._cursor, err)
+                return
 
+            events = page.get("events") or []
+            if not events:
+                return
+
+            if not await self._dispatch(events):
+                # Nothing moved the cursor, so asking again would fetch the
+                # same page forever. Stop rather than spin.
+                return
+
+            if not page.get("has_more"):
+                return
+
+    async def _dispatch(self, events: list[dict[str, Any]]) -> bool:
+        """Fire one page onto the bus. Returns whether the cursor moved."""
         highest = self._cursor
+
         for event in events:
             event_type = event.get("event_type")
             event_id = event.get("event_id")
+
+            # Belt and braces against re-delivery. The server filters on
+            # `id > after`, so this should not trigger — but "no duplicate
+            # events" is a promise to every automation a household has written,
+            # and it should not rest solely on the other side staying correct.
+            # A doubled event means the lights flash twice or a task is created
+            # twice, and nobody can diagnose that from the outside.
+            if (
+                isinstance(event_id, int)
+                and self._cursor is not None
+                and event_id <= self._cursor
+            ):
+                _LOGGER.debug("Skipping already-delivered event %s", event_id)
+                continue
+
             if event_type not in KNOWN_EVENTS:
                 # Forward-compatible: a newer Kinboard may emit events this
                 # version has never heard of. Ignoring them is correct; caring
@@ -111,3 +148,5 @@ class KinboardCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # way round would drop it silently, which they cannot.
         if highest is not None and highest != self._cursor:
             await self._save_cursor(highest)
+            return True
+        return False

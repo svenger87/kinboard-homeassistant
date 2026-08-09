@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  # So validation can be re-run without an empty commit — needed the moment
+  # the repository went public, because the HACS job is gated on that and had
+  # never executed against a public repo.
+  workflow_dispatch:
   schedule:
     # HACS and hassfest rules change under us; a weekly run catches a break
     # that no commit of ours caused.

@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="custom_components/kinboard/brand/dark_logo@2x.png">
-    <img src="custom_components/kinboard/brand/logo@2x.png" alt="Kinboard for Home Assistant" width="420">
+    <source media="(prefers-color-scheme: dark)" srcset="custom_components/kinboard/brand/dark_logo.png">
+    <img src="custom_components/kinboard/brand/logo.png" alt="Kinboard for Home Assistant" width="420">
   </picture>
 </p>
 

@@ -11,6 +11,7 @@ Contract: RFC-001 in the Kinboard repository.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from typing import Any
 
@@ -94,13 +95,27 @@ def _async_adopt_contract_entity_ids(hass: HomeAssistant, entry: ConfigEntry) ->
     somebody renamed it deliberately, and their automations point at it.
     """
     registry = er.async_get(hass)
+    family = slugify(entry.title)
 
     for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
         if not reg_entry.original_name:
             continue
 
-        untouched = f"{reg_entry.domain}.{slugify(f'{entry.title} {reg_entry.original_name}')}"
-        if reg_entry.entity_id != untouched:
+        object_id = reg_entry.entity_id.split(".", 1)[1]
+
+        # Two generations of auto-generated id are recognised.
+        #
+        # The current one is "<family> <entity name>". The other predates the
+        # entity names existing at all: without an `entity:` block in
+        # strings.json every entity fell back to the device name, so a family
+        # called Weber got sensor.weber, sensor.weber_2, sensor.weber_3 —
+        # ids nobody could write an automation against, and the exact state
+        # the first real install is still in. Fixing the names later did not
+        # move them, because an id is minted once and then kept forever.
+        generated = {slugify(f"{entry.title} {reg_entry.original_name}"), family}
+        numbered = re.fullmatch(rf"{re.escape(family)}_\d+", object_id) is not None
+
+        if object_id not in generated and not numbered:
             continue
 
         wanted = f"{reg_entry.domain}.{slugify(f'Kinboard {reg_entry.original_name}')}"

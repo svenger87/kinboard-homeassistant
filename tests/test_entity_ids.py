@@ -78,6 +78,45 @@ async def test_an_existing_install_is_migrated(hass, config_entry, mock_client):
     assert registry.async_get("sensor.kinboard_next_birthday") is not None
 
 
+async def test_the_pre_naming_generation_is_migrated_too(hass, config_entry, mock_client):
+    """The shape the first real install is actually in.
+
+    Before strings.json had an `entity:` block, every entity fell back to the
+    device name, so one family got sensor.weber, sensor.weber_2,
+    sensor.weber_3 — ids nobody could write an automation against. Giving the
+    entities proper names later did not move them, because an id is minted once
+    and then kept forever. Matching only the newer "<family> <name>" pattern
+    would skip precisely the install that needs this most.
+    """
+    config_entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    for suffix, unique, name in (
+        ("", "birthdays_upcoming", "Next birthday"),
+        ("_2", "tasks_due", "Tasks due"),
+        ("_3", "shopping_items", "Shopping items"),
+    ):
+        registry.async_get_or_create(
+            "sensor",
+            DOMAIN,
+            f"{FAMILY_ID}_{unique}",
+            suggested_object_id=f"testfamilie{suffix}",
+            original_name=name,
+            config_entry=config_entry,
+        )
+
+    with patch("custom_components.kinboard.KinboardClient", return_value=mock_client):
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    for expected in (
+        "sensor.kinboard_next_birthday",
+        "sensor.kinboard_tasks_due",
+        "sensor.kinboard_shopping_items",
+    ):
+        assert registry.async_get(expected) is not None, f"{expected} was not migrated"
+    assert registry.async_get("sensor.testfamilie_2") is None
+
+
 async def test_an_id_the_user_chose_is_left_alone(hass, config_entry, mock_client):
     """Their automations point at it. Renaming it would break them silently,
     which is a worse outcome than an inconsistent id."""

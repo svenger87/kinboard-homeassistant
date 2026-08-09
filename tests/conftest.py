@@ -68,6 +68,10 @@ SUMMARY: dict[str, Any] = {
         "days_until": 2,
         "upcoming": [{"title": "Bioabfallbehaelter", "type": "bio", "date": "2026-08-11"}],
     },
+    "saving_goals": [
+        {"person": "Mia", "name": "Tesla Siku", "target": 10.0, "saved": 5.02,
+         "percent": 50, "currency": "EUR"},
+    ],
     "display_mode": "morning",
     "attention_required": False,
     "pocket_money": [

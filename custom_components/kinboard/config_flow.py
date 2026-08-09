@@ -116,6 +116,43 @@ class KinboardConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user", data_schema=STEP_USER_SCHEMA, errors=errors
         )
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Change the address or the token without starting again.
+
+        Without this, moving Kinboard to a different host — a new port, a
+        Tailscale name, https — meant deleting the integration and adding it
+        back, which throws away every entity id and silently breaks whatever
+        automations referenced them. Reauth cannot serve: it only asks for a
+        token, and the address is the thing that usually changed.
+        """
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            info, error = await self._validate(
+                user_input[CONF_BASE_URL], user_input[CONF_TOKEN]
+            )
+            if error:
+                errors["base"] = error
+            else:
+                assert info is not None
+                # Still the same family, or it is a different Kinboard and the
+                # entities would silently start describing another household.
+                await self.async_set_unique_id(info["family_id"])
+                self._abort_if_unique_id_mismatch(reason="wrong_family")
+                return self.async_update_reload_and_abort(entry, data_updates=dict(user_input))
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self.add_suggested_values_to_schema(
+                STEP_USER_SCHEMA,
+                {CONF_BASE_URL: entry.data.get(CONF_BASE_URL), CONF_TOKEN: ""},
+            ),
+            errors=errors,
+        )
+
     async def async_step_reauth(
         self, entry_data: dict[str, Any]
     ) -> ConfigFlowResult:

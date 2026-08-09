@@ -108,3 +108,45 @@ async def test_the_same_family_cannot_be_added_twice(hass, config_entry):
     result = await _submit(hass, return_value=INFO)
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
+
+
+async def test_reconfigure_changes_the_address_without_starting_again(hass, config_entry):
+    """Moving Kinboard to a new host must not cost the entity ids.
+
+    Without this flow the only route was delete-and-re-add, which mints new
+    entity ids and silently breaks every automation that referenced the old
+    ones. Reauth cannot serve: it asks only for a token, and the address is
+    usually the thing that changed.
+    """
+    config_entry.add_to_hass(hass)
+
+    with _patch_info(return_value=INFO), patch(
+        "custom_components.kinboard.async_setup_entry", return_value=True
+    ):
+        result = await config_entry.start_reconfigure_flow(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_BASE_URL: "http://kinboard.newhost:3000", CONF_TOKEN: "kbi_new"},
+        )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert config_entry.data[CONF_BASE_URL] == "http://kinboard.newhost:3000"
+    assert config_entry.data[CONF_TOKEN] == "kbi_new"
+
+
+async def test_reconfigure_refuses_a_different_family(hass, config_entry):
+    """Otherwise the entities quietly start describing another household."""
+    config_entry.add_to_hass(hass)
+
+    with _patch_info(return_value={**INFO, "family_id": "99999999-9999-9999-9999-999999999999"}):
+        result = await config_entry.start_reconfigure_flow(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_BASE_URL: "http://someone-else:3000", CONF_TOKEN: "kbi_other"},
+        )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "wrong_family"
+    # Untouched.
+    assert config_entry.data[CONF_BASE_URL] == "http://kinboard.test"

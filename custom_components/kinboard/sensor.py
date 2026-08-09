@@ -18,6 +18,7 @@ from .const import (
     SENSOR_BIRTHDAYS_UPCOMING,
     SENSOR_MEAL_TOMORROW,
     SENSOR_WASTE_COLLECTION,
+    SENSOR_SAVING_GOALS,
     SENSOR_POCKET_MONEY_PREFIX,
     SENSOR_TASKS_OVERDUE,
     SENSOR_DISPLAY_MODE,
@@ -97,6 +98,15 @@ async def async_setup_entry(
         if isinstance(purse, dict) and purse.get("person_id"):
             entities.append(KinboardPocketMoney(coordinator, purse["person_id"], purse.get("name") or "?"))
 
+    # One per active saving goal. Keyed on person + goal name rather than an
+    # id, because the summary carries no goal id — and the pair is what makes
+    # it unique anyway: two children may both be saving for a Lego set.
+    for goal in (coordinator.data or {}).get(SENSOR_SAVING_GOALS) or []:
+        if isinstance(goal, dict) and goal.get("name"):
+            entities.append(
+                KinboardSavingGoal(coordinator, str(goal.get("person") or "?"), str(goal["name"]))
+            )
+
     async_add_entities(entities)
 
 
@@ -132,6 +142,47 @@ class KinboardPocketMoney(KinboardEntity, SensorEntity):
     def native_unit_of_measurement(self) -> str | None:
         row = self._row()
         return row.get("currency") if row else None
+
+
+class KinboardSavingGoal(KinboardEntity, SensorEntity):
+    """How far one child is towards one goal, as a percentage."""
+
+    _attr_native_unit_of_measurement = "%"
+
+    def __init__(self, coordinator, person: str, goal: str) -> None:
+        super().__init__(coordinator, f"{SENSOR_SAVING_GOALS}_{person}_{goal}".lower())
+        self._person = person
+        self._goal = goal
+        self._attr_translation_key = None
+        self._attr_name = f"{person}: {goal}"
+
+    def _row(self) -> dict[str, Any] | None:
+        for goal in (self.coordinator.data or {}).get(SENSOR_SAVING_GOALS) or []:
+            if (
+                isinstance(goal, dict)
+                and goal.get("name") == self._goal
+                and str(goal.get("person")) == self._person
+            ):
+                return goal
+        return None
+
+    @property
+    def available(self) -> bool:
+        # A goal that has been reached or abandoned stops being reported, and
+        # the entity goes unavailable rather than freezing at its last value.
+        return self.coordinator.last_update_success and self._row() is not None
+
+    @property
+    def native_value(self) -> Any:
+        row = self._row()
+        return row.get("percent") if row else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        row = self._row()
+        if not row:
+            return None
+        return {k: row.get(k) for k in ("saved", "target", "currency", "person") if k in row}
 
 
 class KinboardSensor(KinboardEntity, SensorEntity):

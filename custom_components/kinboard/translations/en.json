@@ -15,6 +15,14 @@
         "data": {
           "token": "Integration token"
         }
+      },
+      "reconfigure": {
+        "title": "Change the Kinboard connection",
+        "description": "Point Home Assistant at a different address, or replace the token. It must be the same family.",
+        "data": {
+          "base_url": "Kinboard address",
+          "token": "Integration token"
+        }
       }
     },
     "error": {
@@ -26,7 +34,8 @@
     },
     "abort": {
       "already_configured": "This Kinboard family is already set up.",
-      "reauth_successful": "Kinboard reconnected."
+      "reauth_successful": "Kinboard reconnected.",
+      "wrong_family": "That Kinboard belongs to a different family. Add it as a separate integration instead."
     }
   },
   "entity": {

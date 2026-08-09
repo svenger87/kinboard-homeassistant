@@ -52,6 +52,11 @@ SENSOR_MEAL_TOMORROW: Final = "meal_tomorrow"
 # reaching nothing outside its own widget.
 SENSOR_WASTE_COLLECTION: Final = "waste_collection"
 
+# One sensor per active saving goal, so a child's progress can drive a light,
+# a sound, or a chart. Like pocket money, the count is not ours to assume, so
+# the key is a prefix.
+SENSOR_SAVING_GOALS: Final = "saving_goals"
+
 # One sensor per child, so the key is a prefix rather than a whole key.
 SENSOR_POCKET_MONEY_PREFIX: Final = "pocket_money"
 

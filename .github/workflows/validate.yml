@@ -44,10 +44,17 @@ jobs:
           # pyproject.toml, finds neither, and fails the job before pytest is
           # ever reached — a red build that says nothing about the code.
           cache-dependency-path: requirements-test.txt
-      - run: pip install -r requirements-test.txt
-      - name: Pin the Home Assistant under test
+      # Resolved in ONE pip call, not installed-then-downgraded. The harness
+      # pins an exact Home Assistant, so installing it first and downgrading
+      # afterwards leaves a harness expecting APIs the pinned version does not
+      # have — pip says as much and exits 0 anyway, and the failure surfaces
+      # later as unrelated-looking test errors.
+      - name: Install (harness default)
+        if: matrix.ha == 'harness'
+        run: pip install -r requirements-test.txt
+      - name: Install (pinned Home Assistant ${{ matrix.ha }})
         if: matrix.ha != 'harness'
-        run: pip install "homeassistant==${{ matrix.ha }}"
+        run: pip install "homeassistant==${{ matrix.ha }}" pytest-homeassistant-custom-component
       - run: pytest -q
 
   hassfest:

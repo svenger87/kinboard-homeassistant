@@ -28,19 +28,34 @@ INFO: dict[str, Any] = {
 # Shaped like the real endpoint, including the two shapes a sensor has to cope
 # with: an object carrying `state` plus detail, and a bare scalar.
 SUMMARY: dict[str, Any] = {
+    # Field-for-field what the live endpoint returns. Inventing a tidier shape
+    # here would have hidden the `start`/`start_at` mismatch instead of
+    # catching it.
     "next_family_event": {
         "state": "Jonas Physio",
+        "id": "evt-1",
         "title": "Jonas Physio",
         "start_at": "2026-08-09T15:00:00+02:00",
         "location": "Praxis",
+        "person_id": "child-1",
         "minutes_remaining": 90,
     },
     "events_today": {"state": 2, "events": ["Jonas Physio", "Elternabend"]},
     "shopping_items": 3,
     "tasks_due": {"state": 1, "open": 1, "overdue": 0},
     "tasks_overdue": 0,
-    "birthdays_upcoming": {"state": "Lena Weber", "name": "Lena Weber", "days_remaining": 12},
-    "school_tomorrow": {"state": "Mia", "children": ["Mia"], "first_lesson": "Mathe"},
+    "birthdays_upcoming": {
+        "state": "Lena Weber",
+        "name": "Lena Weber",
+        "days_remaining": 12,
+        "date": "2026-08-21",
+    },
+    "school_tomorrow": {
+        "state": "Mia",
+        "children": ["Mia"],
+        "count": 1,
+        "first_lesson": "Mathe",
+    },
     # Null on purpose: nobody has planned a meal, which is a real state and
     # must survive as "unknown" rather than becoming 0 or "".
     "meal_today": {"state": None, "meal": None, "recipe_id": None},

@@ -46,17 +46,26 @@ class KinboardSensorDescription(SensorEntityDescription):
 SENSORS: tuple[KinboardSensorDescription, ...] = (
     KinboardSensorDescription(
         key=SENSOR_NEXT_FAMILY_EVENT,
-        attribute_keys=("title", "start", "person", "location", "minutes_remaining"),
+        # These are the API's own field names, not the words a person would
+        # pick. They were once `start` and `person`; the server sends
+        # `start_at` and `person_id`, so the sensor carried no start time at
+        # all — and nothing failed loudly, because a declared key that is
+        # missing from the payload is quietly skipped. test_sensor_attributes
+        # now makes that mismatch a test failure.
+        attribute_keys=("title", "start_at", "person_id", "location", "minutes_remaining"),
     ),
     KinboardSensorDescription(key=SENSOR_EVENTS_TODAY, attribute_keys=("events",)),
     KinboardSensorDescription(key=SENSOR_SHOPPING_ITEMS),
     KinboardSensorDescription(key=SENSOR_MEAL_TODAY, attribute_keys=("meal", "recipe_id")),
     KinboardSensorDescription(key=SENSOR_TASKS_DUE, attribute_keys=("open", "overdue")),
     KinboardSensorDescription(
-        key=SENSOR_SCHOOL_TOMORROW, attribute_keys=("children", "first_lesson")
+        key=SENSOR_SCHOOL_TOMORROW, attribute_keys=("children", "count", "first_lesson")
     ),
     KinboardSensorDescription(
-        key=SENSOR_BIRTHDAYS_UPCOMING, attribute_keys=("name", "days_remaining")
+        # `date` matters as much as the countdown: "in 12 days" is the nudge,
+        # the date is what you put in a calendar.
+        key=SENSOR_BIRTHDAYS_UPCOMING,
+        attribute_keys=("name", "days_remaining", "date"),
     ),
     KinboardSensorDescription(key=SENSOR_DISPLAY_MODE),
     # Its own sensor rather than an attribute of tasks_due, so "something is

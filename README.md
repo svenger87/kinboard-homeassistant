@@ -16,22 +16,24 @@ Most integrations point one way: Kinboard already *reads* Home Assistant, showin
 Home Assistant gains what the family has on today, the family calendar, and the shopping and task lists as real to-do lists you can tick. Kinboard gains a way for automations to put something on the shopping list or create a task.
 
 ```yaml
-automation:
-  - alias: "Say who has a birthday when the kitchen light comes on"
-    trigger:
-      - platform: state
-        entity_id: light.kitchen
-        to: "on"
-    condition:
-      - condition: numeric_state
-        entity_id: sensor.kinboard_next_birthday
-        attribute: days_remaining
-        below: 1
-    action:
-      - service: tts.speak
-        data:
-          message: "It's {{ states('sensor.kinboard_next_birthday') }}'s birthday today."
+- alias: "Say who has a birthday when the kitchen light comes on"
+  triggers:
+    - trigger: state
+      entity_id: light.kitchen
+      to: "on"
+  conditions:
+    - condition: numeric_state
+      entity_id: sensor.kinboard_next_birthday
+      attribute: days_remaining
+      below: 1
+  actions:
+    - action: tts.speak
+      data:
+        message: "It's {{ states('sensor.kinboard_next_birthday') }}'s birthday today."
 ```
+
+Eleven more, ready to paste, in **[`examples/`](examples/)** — each one loaded
+into a real Home Assistant by the test suite on every CI run.
 
 ## Requirements
 
@@ -73,10 +75,10 @@ A call made without the matching scope fails with a message that says so, rather
 
 | Entity | Shows | Also carries |
 |---|---|---|
-| `sensor.kinboard_next_family_event` | the next appointment's title | start, location, person, minutes remaining |
+| `sensor.kinboard_next_family_event` | the next appointment's title | `start_at`, `location`, `person_id`, `minutes_remaining` |
 | `sensor.kinboard_events_today` | how many events today | the list of them |
-| `sensor.kinboard_next_birthday` | **whose** birthday is next | days remaining, the date |
-| `sensor.kinboard_school_tomorrow` | **which children** have school | first lesson, count |
+| `sensor.kinboard_next_birthday` | **whose** birthday is next | `days_remaining`, `date` |
+| `sensor.kinboard_school_tomorrow` | **which children** have school | `children`, `count`, `first_lesson` |
 | `sensor.kinboard_shopping_items` | open items | |
 | `sensor.kinboard_tasks_due` | open tasks | open, overdue |
 | `sensor.kinboard_tasks_overdue` | overdue tasks | |
@@ -87,6 +89,8 @@ A call made without the matching scope fails with a message that says so, rather
 | `sensor.kinboard_display_mode` | reserved for a later release | |
 
 The state is deliberately the **human answer**, not a count — Home Assistant shows the state on a card and hides attributes, so "Next birthday: 0" told nobody it was Nora's. The counts are still there as attributes.
+
+Entity ids do **not** contain your family name. The device is called Kinboard so that `sensor.kinboard_next_birthday` means the same thing on every install and an example automation can be copied verbatim; your family name is on the device instead. A second family in one household gets the usual `_2` suffix.
 
 ### Calendar
 

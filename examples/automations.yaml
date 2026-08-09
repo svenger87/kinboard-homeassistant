@@ -1,0 +1,230 @@
+# Ten automations you can paste straight into automations.yaml.
+#
+# Every entity, service and event named here is part of the published contract
+# (RFC-001), and a test in this repository fails if one of them stops existing —
+# so an example that worked when it was written keeps working.
+#
+# What you WILL need to change: the notification targets. `notify.notify` goes
+# to whatever you have configured as default; `media_player.kitchen` and
+# `zone.supermarkt` are guesses about your house, not about Kinboard.
+
+- id: kinboard_birthday_today
+  alias: "Kinboard: wish a happy birthday at breakfast"
+  description: >-
+    The sensor's state is the person's name, so it can be announced directly.
+    Checked at a fixed time rather than on state change, because the birthday
+    becomes "today" at midnight when nobody is listening.
+  mode: single
+  triggers:
+    - trigger: time
+      at: "07:30:00"
+  conditions:
+    - condition: numeric_state
+      entity_id: sensor.kinboard_next_birthday
+      attribute: days_remaining
+      below: 1
+  actions:
+    - action: notify.notify
+      data:
+        title: "Geburtstag heute"
+        message: "{{ states('sensor.kinboard_next_birthday') }} hat heute Geburtstag."
+
+- id: kinboard_birthday_present_warning
+  alias: "Kinboard: a week's warning to buy a present"
+  description: >-
+    Writes back into Kinboard rather than sending a notification that gets
+    swiped away. A task on the family board survives being read at a red light.
+  mode: single
+  triggers:
+    - trigger: time
+      at: "18:00:00"
+  conditions:
+    - condition: numeric_state
+      entity_id: sensor.kinboard_next_birthday
+      attribute: days_remaining
+      above: 6
+      below: 8
+  actions:
+    - action: kinboard.create_task
+      data:
+        title: >-
+          Geschenk für {{ state_attr('sensor.kinboard_next_birthday', 'name') }} besorgen
+        due_date: "{{ state_attr('sensor.kinboard_next_birthday', 'date') }}"
+
+- id: kinboard_leave_now
+  alias: "Kinboard: nudge before the next appointment"
+  description: >-
+    `minutes_remaining` counts down on every poll, so this fires once as it
+    crosses 30 rather than repeatedly below it.
+  mode: single
+  triggers:
+    - trigger: numeric_state
+      entity_id: sensor.kinboard_next_family_event
+      attribute: minutes_remaining
+      below: 30
+  actions:
+    - action: notify.notify
+      data:
+        title: "Gleich los"
+        message: >-
+          {{ states('sensor.kinboard_next_family_event') }} in
+          {{ state_attr('sensor.kinboard_next_family_event', 'minutes_remaining') }} Minuten
+          {%- if state_attr('sensor.kinboard_next_family_event', 'location') %}
+          ({{ state_attr('sensor.kinboard_next_family_event', 'location') }})
+          {%- endif %}.
+
+- id: kinboard_school_bag_tonight
+  alias: "Kinboard: pack the school bag the night before"
+  description: >-
+    The state is which children have school tomorrow, so an empty state means
+    a holiday and no reminder — which is the whole point of asking Kinboard
+    instead of using a weekday condition.
+  mode: single
+  triggers:
+    - trigger: time
+      at: "19:30:00"
+  conditions:
+    - condition: not
+      conditions:
+        - condition: state
+          entity_id: sensor.kinboard_school_tomorrow
+          state:
+            - "unknown"
+            - "unavailable"
+            - ""
+  actions:
+    - action: notify.notify
+      data:
+        title: "Morgen Schule"
+        message: >-
+          {{ states('sensor.kinboard_school_tomorrow') }} — erste Stunde
+          {{ state_attr('sensor.kinboard_school_tomorrow', 'first_lesson') or 'unbekannt' }}.
+
+- id: kinboard_overdue_at_dinner
+  alias: "Kinboard: mention overdue tasks at dinner"
+  description: >-
+    Deliberately once a day at a time the family is together, not on every
+    change. A task becoming overdue at 03:00 is not worth a phone buzzing.
+  mode: single
+  triggers:
+    - trigger: time
+      at: "18:30:00"
+  conditions:
+    - condition: numeric_state
+      entity_id: sensor.kinboard_tasks_overdue
+      above: 0
+  actions:
+    - action: notify.notify
+      data:
+        title: "Überfällig"
+        message: "{{ states('sensor.kinboard_tasks_overdue') }} Aufgabe(n) sind überfällig."
+
+- id: kinboard_shopping_near_the_shop
+  alias: "Kinboard: remind me of the list when I pass the shop"
+  description: >-
+    Change `zone.supermarkt` and the person to match your setup. The condition
+    is what makes this bearable — no list, no notification.
+  mode: single
+  triggers:
+    - trigger: zone
+      entity_id: person.papa
+      zone: zone.supermarkt
+      event: enter
+  conditions:
+    - condition: numeric_state
+      entity_id: sensor.kinboard_shopping_items
+      above: 0
+  actions:
+    - action: notify.notify
+      data:
+        title: "Einkaufsliste"
+        message: "{{ states('sensor.kinboard_shopping_items') }} Sachen stehen auf der Liste."
+
+- id: kinboard_button_adds_to_the_list
+  alias: "Kinboard: a button by the fridge adds milk"
+  description: >-
+    The point of this one is that it needs no screen. Duplicate it per item, or
+    use a tag scan and template the name.
+  mode: single
+  triggers:
+    - trigger: state
+      entity_id: input_button.milch_alle
+  actions:
+    - action: kinboard.add_shopping_item
+      data:
+        name: "Milch"
+
+- id: kinboard_washing_machine_becomes_a_task
+  alias: "Kinboard: turn a finished wash into a task"
+  description: >-
+    Change the power sensor to yours. Creating a task rather than notifying
+    means it is still there tomorrow if nobody acts on it tonight.
+  mode: single
+  triggers:
+    - trigger: numeric_state
+      entity_id: sensor.waschmaschine_leistung
+      below: 5
+      for: "00:05:00"
+  actions:
+    - action: kinboard.create_task
+      data:
+        title: "Wäsche aufhängen"
+
+- id: kinboard_task_completed_feedback
+  alias: "Kinboard: acknowledge a completed task on the speaker"
+  description: >-
+    Fired from a database trigger inside Kinboard, so this works whether the
+    task was ticked on the wall tablet, on a phone, or by another automation.
+  mode: queued
+  max: 10
+  triggers:
+    - trigger: event
+      event_type: kinboard_task_completed
+  actions:
+    - action: media_player.play_media
+      target:
+        entity_id: media_player.kitchen
+      data:
+        media_content_id: "https://example.invalid/ding.mp3"
+        media_content_type: music
+
+- id: kinboard_new_device_joined
+  alias: "Kinboard: tell me when a device joins the family board"
+  description: >-
+    A join code is a shared secret, so a device appearing that nobody added is
+    worth knowing about the same day rather than at the next audit.
+  mode: queued
+  max: 5
+  triggers:
+    - trigger: event
+      event_type: kinboard_device_joined
+  actions:
+    - action: notify.notify
+      data:
+        title: "Neues Gerät bei Kinboard"
+        message: "Ein Gerät ist der Familie beigetreten: {{ trigger.event.data }}"
+
+- id: kinboard_no_meal_planned
+  alias: "Kinboard: nudge on Sunday if next week has no meals"
+  description: >-
+    An unplanned meal reads as "unknown", which is deliberately not zero and
+    not an empty string — there is a difference between "nothing planned" and
+    "planned nothing".
+  mode: single
+  triggers:
+    - trigger: time
+      at: "17:00:00"
+  conditions:
+    - condition: time
+      weekday:
+        - sun
+    - condition: state
+      entity_id: sensor.kinboard_meal_tomorrow
+      state:
+        - "unknown"
+        - "unavailable"
+  actions:
+    - action: notify.notify
+      data:
+        title: "Essensplan"
+        message: "Für morgen ist noch nichts eingeplant."

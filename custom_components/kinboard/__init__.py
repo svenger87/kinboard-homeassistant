@@ -10,6 +10,7 @@ Contract: RFC-001 in the Kinboard repository.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Any
 
@@ -19,7 +20,9 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.util import slugify
 
 from .api import KinboardAuthError, KinboardClient, KinboardError
 from .const import (
@@ -36,6 +39,8 @@ from .const import (
     SERVICE_SHOW_ANNOUNCEMENT,
 )
 from .coordinator import KinboardCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
@@ -70,9 +75,42 @@ async def async_setup_entry(hass: HomeAssistant, entry: KinboardConfigEntry) -> 
     await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = coordinator
+    _async_adopt_contract_entity_ids(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _async_register_services(hass)
     return True
+
+
+def _async_adopt_contract_entity_ids(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Move entities created before the device was renamed onto the contract ids.
+
+    Home Assistant derives an entity_id once, at first registration, and then
+    keeps it forever — so renaming the device fixes new installs and leaves
+    existing ones on `sensor.<family>_next_birthday`. Those are exactly the
+    installs whose owners are most likely to be copying an example automation.
+
+    Only ids that still look auto-generated are touched. If the current id is
+    not what this integration would itself have produced from the family name,
+    somebody renamed it deliberately, and their automations point at it.
+    """
+    registry = er.async_get(hass)
+
+    for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if not reg_entry.original_name:
+            continue
+
+        untouched = f"{reg_entry.domain}.{slugify(f'{entry.title} {reg_entry.original_name}')}"
+        if reg_entry.entity_id != untouched:
+            continue
+
+        wanted = f"{reg_entry.domain}.{slugify(f'Kinboard {reg_entry.original_name}')}"
+        if wanted == reg_entry.entity_id or registry.async_get(wanted) is not None:
+            # Already right, or the name is taken — a rename onto an occupied
+            # id would fail, and stealing it would break whatever holds it.
+            continue
+
+        _LOGGER.info("Renaming %s to %s to match the published contract", reg_entry.entity_id, wanted)
+        registry.async_update_entity(reg_entry.entity_id, new_entity_id=wanted)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: KinboardConfigEntry) -> bool:

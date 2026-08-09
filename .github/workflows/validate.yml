@@ -11,8 +11,26 @@ on:
 
 jobs:
   tests:
-    name: tests
+    name: tests (HA ${{ matrix.ha }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # `harness` is whatever pytest-homeassistant-custom-component pins;
+        # 2026.7.4 is what a real installation is actually running. Testing
+        # only the first let a teardown failure through that appeared solely on
+        # the second — the suite passed here and errored on the household's own
+        # version, which is the version that matters.
+        #
+        # The Python version is pinned per leg rather than shared: 2026.7
+        # will not install on 3.13 at all, so a single python-version would
+        # have failed that leg during pip install and reported nothing about
+        # the code.
+        include:
+          - ha: harness
+            python: "3.13"
+          - ha: "2026.7.4"
+            python: "3.14"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -20,13 +38,16 @@ jobs:
           # The Home Assistant test harness will not install below this, and
           # several of its dependencies build from source, so the cache earns
           # its keep here.
-          python-version: "3.13"
+          python-version: ${{ matrix.python }}
           cache: pip
           # Without this the cache step globs for requirements.txt or
           # pyproject.toml, finds neither, and fails the job before pytest is
           # ever reached — a red build that says nothing about the code.
           cache-dependency-path: requirements-test.txt
       - run: pip install -r requirements-test.txt
+      - name: Pin the Home Assistant under test
+        if: matrix.ha != 'harness'
+        run: pip install "homeassistant==${{ matrix.ha }}"
       - run: pytest -q
 
   hassfest:

@@ -49,6 +49,7 @@ SUMMARY: dict[str, Any] = {
         "name": "Lena Weber",
         "days_remaining": 12,
         "date": "2026-08-21",
+        "born_on": "2014-08-21",
     },
     "school_tomorrow": {
         "state": "Mia",
@@ -60,7 +61,14 @@ SUMMARY: dict[str, Any] = {
     # must survive as "unknown" rather than becoming 0 or "".
     "meal_today": {"state": None, "meal": None, "recipe_id": None},
     "meal_tomorrow": {"state": None, "meal": None, "recipe_id": None},
-    "display_mode": None,
+    "waste_collection": {
+        "state": "Bioabfallbehaelter",
+        "type": "bio",
+        "date": "2026-08-11",
+        "days_until": 2,
+        "upcoming": [{"title": "Bioabfallbehaelter", "type": "bio", "date": "2026-08-11"}],
+    },
+    "display_mode": "morning",
     "attention_required": False,
     "pocket_money": [
         {"person_id": "child-1", "name": "Mia", "balance": 12.5, "currency": "EUR"},

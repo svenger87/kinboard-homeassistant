@@ -17,6 +17,7 @@ from . import KinboardConfigEntry
 from .const import (
     SENSOR_BIRTHDAYS_UPCOMING,
     SENSOR_MEAL_TOMORROW,
+    SENSOR_WASTE_COLLECTION,
     SENSOR_POCKET_MONEY_PREFIX,
     SENSOR_TASKS_OVERDUE,
     SENSOR_DISPLAY_MODE,
@@ -65,13 +66,20 @@ SENSORS: tuple[KinboardSensorDescription, ...] = (
         # `date` matters as much as the countdown: "in 12 days" is the nudge,
         # the date is what you put in a calendar.
         key=SENSOR_BIRTHDAYS_UPCOMING,
-        attribute_keys=("name", "days_remaining", "date"),
+        attribute_keys=("name", "days_remaining", "date", "born_on"),
     ),
     KinboardSensorDescription(key=SENSOR_DISPLAY_MODE),
     # Its own sensor rather than an attribute of tasks_due, so "something is
     # overdue" is a trigger rather than a template.
     KinboardSensorDescription(key=SENSOR_TASKS_OVERDUE),
     KinboardSensorDescription(key=SENSOR_MEAL_TOMORROW, attribute_keys=("meal", "recipe_id")),
+    KinboardSensorDescription(
+        # The state is which bin, because that is what somebody standing in the
+        # hall at 22:00 needs to know. `days_until` is what an automation
+        # triggers on, and `upcoming` lets one look further than tomorrow.
+        key=SENSOR_WASTE_COLLECTION,
+        attribute_keys=("type", "date", "days_until", "upcoming"),
+    ),
 )
 
 

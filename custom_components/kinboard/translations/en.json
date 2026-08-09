@@ -60,6 +60,9 @@
       },
       "meal_tomorrow": {
         "name": "Meal tomorrow"
+      },
+      "waste_collection": {
+        "name": "Next waste collection"
       }
     },
     "binary_sensor": {

@@ -47,6 +47,11 @@ SENSOR_DISPLAY_MODE: Final = "display_mode"
 SENSOR_TASKS_OVERDUE: Final = "tasks_overdue"
 SENSOR_MEAL_TOMORROW: Final = "meal_tomorrow"
 
+# Bin day. Among the most-automated things in Home Assistant, and the data was
+# already in Kinboard — an ordinary calendar flagged is_waste_collection —
+# reaching nothing outside its own widget.
+SENSOR_WASTE_COLLECTION: Final = "waste_collection"
+
 # One sensor per child, so the key is a prefix rather than a whole key.
 SENSOR_POCKET_MONEY_PREFIX: Final = "pocket_money"
 

@@ -55,9 +55,19 @@ def test_referenced_events_exist(event):
     assert event in KNOWN_EVENTS, f"{event} is not an event Kinboard emits"
 
 
-async def test_home_assistant_can_load_all_of_them(hass, setup_integration):
+@pytest.mark.parametrize("expected_lingering_timers", [True])
+async def test_home_assistant_can_load_all_of_them(
+    hass, setup_integration, expected_lingering_timers
+):
     """Schema validation, which catches a mistyped trigger key or a bad
-    template long before somebody pastes it into their own config."""
+    template long before somebody pastes it into their own config.
+
+    Lingering timers are expected and declared. Most of these automations
+    trigger on a time of day, so loading them registers timers that outlive the
+    test by design — that is the thing being tested. Newer Home Assistant test
+    harnesses fail teardown on leftover timers unless told, which surfaced only
+    when the suite was run against 2026.7 rather than the harness default.
+    """
     assert await async_setup_component(hass, "automation", {"automation": CONFIG})
     await hass.async_block_till_done()
 

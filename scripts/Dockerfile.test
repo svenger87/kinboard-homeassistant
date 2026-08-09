@@ -1,0 +1,20 @@
+# A Python the Home Assistant test harness will actually install on.
+#
+# This exists because the machine we develop on is Unraid, whose /usr/bin/python3
+# is 3.11, lives on a RAM-backed root filesystem, and is what emhttp runs on.
+# Upgrading it in place would neither survive a reboot nor be a good idea.
+#
+# Not slim: several of Home Assistant's transitive dependencies (lru-dict among
+# them) ship no wheel and need a C compiler at install time.
+FROM python:3.13
+
+WORKDIR /work
+
+# Copied and installed on their own so the dependency layer is cached and only
+# rebuilt when the requirements change — not on every edit to the component.
+COPY requirements-test.txt .
+RUN pip install --no-cache-dir --root-user-action=ignore -r requirements-test.txt
+
+# The source is mounted at run time rather than copied, so a test run always
+# sees the working tree instead of whatever was current at build time.
+CMD ["pytest", "-q"]

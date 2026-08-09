@@ -1,0 +1,4 @@
+# The Home Assistant test harness. It pins the Home Assistant version it was
+# built against, which is deliberate: tests should fail when a new Home
+# Assistant changes something under us, not silently drift.
+pytest-homeassistant-custom-component

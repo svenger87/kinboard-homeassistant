@@ -1,7 +1,13 @@
 <p align="center">
+  <!-- Absolute URLs, and the dark variant as the <img> fallback.
+       HACS renders this README inside Home Assistant, where a relative path
+       resolves against nothing and <picture>/<source> are stripped by the
+       sanitiser — so the fallback is the only thing that survives, and it has
+       to be the one that reads on a dark background. logo.png is dark ink on
+       transparency: correct on GitHub in light mode, invisible in HACS. -->
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="custom_components/kinboard/brand/dark_logo.png">
-    <img src="custom_components/kinboard/brand/logo.png" alt="Kinboard for Home Assistant" width="420">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/svenger87/kinboard-homeassistant/main/custom_components/kinboard/brand/logo.png">
+    <img src="https://raw.githubusercontent.com/svenger87/kinboard-homeassistant/main/custom_components/kinboard/brand/dark_logo.png" alt="Kinboard for Home Assistant" width="420">
   </picture>
 </p>
 
@@ -32,7 +38,7 @@ Home Assistant gains what the family has on today, the family calendar, and the 
         message: "It's {{ states('sensor.kinboard_next_birthday') }}'s birthday today."
 ```
 
-Eleven more, ready to paste, in **[`examples/`](examples/)** — each one loaded
+Eleven more, ready to paste, in **[`examples/`](https://github.com/svenger87/kinboard-homeassistant/tree/main/examples)** — each one loaded
 into a real Home Assistant by the test suite on every CI run.
 
 ## Requirements
@@ -84,9 +90,11 @@ A call made without the matching scope fails with a message that says so, rather
 | `sensor.kinboard_tasks_overdue` | overdue tasks | |
 | `sensor.kinboard_meal_today` | what's for dinner | recipe reference |
 | `sensor.kinboard_meal_tomorrow` | tomorrow's dinner | recipe reference |
+| `sensor.kinboard_next_waste_collection` | **which bin** goes out next | `type`, `date`, `days_until`, the next few |
 | `sensor.<child>_pocket_money` | one per child, their balance | currency as the unit |
-| `binary_sensor.kinboard_attention_required` | reserved for a later release | |
-| `sensor.kinboard_display_mode` | reserved for a later release | |
+| `sensor.<child>_<goal>` | one per active saving goal, as a percentage | `saved`, `target`, `currency` |
+| `binary_sensor.kinboard_attention_required` | whether the board has something outstanding | count, and the top item |
+| `sensor.kinboard_display_mode` | which part of the day it is | `morning` · `afternoon` · `evening` · `quiet` |
 
 The state is deliberately the **human answer**, not a count — Home Assistant shows the state on a card and hides attributes, so "Next birthday: 0" told nobody it was Nora's. The counts are still there as attributes.
 
@@ -94,7 +102,7 @@ Entity ids do **not** contain your family name. The device is called Kinboard so
 
 ### Calendar
 
-`calendar.kinboard_family` — the household's calendar, including events that merely *overlap* the window you're looking at, so a week's holiday shows on every day of it rather than only its first.
+`calendar.kinboard_family_calendar` — the household's calendar, including events that merely *overlap* the window you're looking at, so a week's holiday shows on every day of it rather than only its first.
 
 ### To-do lists
 
@@ -104,15 +112,17 @@ Each list keeps **Kinboard's own meaning** for deletion rather than inventing a 
 
 ### Services
 
-`kinboard.add_shopping_item`, `create_task`, `create_note`.
+`kinboard.add_shopping_item` · `create_task` · `create_note` · `add_pocket_money` · `dismiss_attention` · `refresh_integration`.
 
-Also declared and answering *"not implemented yet"* rather than *"unknown"*, so you can tell a typo from a feature that hasn't shipped: `show_announcement`, `activate_context`, `dismiss_attention`, `add_pocket_money`, `refresh_integration`.
+`add_pocket_money` takes an amount in currency units — `2.50` means €2.50 — and follows Kinboard's own deposit path, so the balance moves and the child's avatar tier is credited, not just a transaction row.
+
+Two more are declared and answer *"not implemented yet"* rather than *"unknown"*, so you can tell a typo from a feature that hasn't shipped: `show_announcement` and `activate_context`. Both wait on Kinboard features that do not exist yet.
 
 ### Events
 
 Fired on the Home Assistant bus, so an automation can trigger on `platform: event`:
 
-`kinboard_task_completed` · `kinboard_shopping_item_added` · `kinboard_family_event_created` · `kinboard_device_joined` · `kinboard_saving_goal_reached`
+`kinboard_task_completed` · `kinboard_shopping_item_added` · `kinboard_family_event_created` · `kinboard_device_joined` · `kinboard_saving_goal_reached` · `kinboard_context_changed`
 
 These come from **database triggers in Kinboard**, not from its API layer — so a task ticked on the kitchen tablet fires one exactly as an API call does. Most of Kinboard's screens write straight to the database, and events raised in the API layer would have missed nearly all of them.
 
@@ -129,6 +139,8 @@ Setup tells you which of four things went wrong, because they need different fix
 | *This Kinboard is older than 1.9.0* | upgrade Kinboard; the integration API does not exist in earlier versions |
 | *This token cannot read family data* | recreate it with at least `family:read` |
 
+A brief *"could not verify the token — try again"* is Kinboard restarting, not a bad token: it answers `503` and the integration retries rather than asking you to reconfigure.
+
 Every Kinboard response also carries a short reference, repeated on every log line for that request:
 
 ```bash
@@ -139,7 +151,7 @@ docker logs kinboard-webapp 2>&1 | grep <reference>
 
 ## Contributing
 
-The entity, service and event names are a published contract, frozen in [`const.py`](custom_components/kinboard/const.py) and mirrored by Kinboard's OpenAPI spec, which is checked against its implementation on every CI run. Add freely; never repurpose a name that exists — somebody's automation depends on it.
+The entity, service and event names are a published contract, frozen in [`const.py`](https://github.com/svenger87/kinboard-homeassistant/tree/main/custom_components/kinboard/const.py) and mirrored by Kinboard's OpenAPI spec, which is checked against its implementation on every CI run. Add freely; never repurpose a name that exists — somebody's automation depends on it.
 
 ## Licence
 

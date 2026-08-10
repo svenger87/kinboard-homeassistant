@@ -91,17 +91,48 @@ async def test_a_failed_event_fetch_leaves_entities_alone(hass, config_entry, mo
     assert config_entry.runtime_data.last_update_success
 
 
-async def test_a_dead_token_asks_for_reauth_instead_of_looping(
+async def test_one_rejection_does_not_disable_the_integration(
     hass, config_entry, mock_client
 ):
-    """Kinboard tokens are designed to be rotated, so this is a routine path."""
-    mock_client.async_get_summary.side_effect = KinboardAuthError("revoked")
+    """The failure that took a real household's board off the air.
+
+    Kinboard could not reach its database for a few seconds during a restart
+    and answered 401, because "no such token" and "cannot check" shared a code
+    path. Reauth stops polling until a person intervenes, so a passing 401
+    disabled the integration until somebody noticed the sensors had gone.
+    """
+    mock_client.async_get_summary.side_effect = KinboardAuthError("database was restarting")
     config_entry.add_to_hass(hass)
     with patch("custom_components.kinboard.KinboardClient", return_value=mock_client):
         await hass.config_entries.async_setup(config_entry.entry_id)
         await hass.async_block_till_done()
 
-    assert config_entry.state is ConfigEntryState.SETUP_ERROR
+    # Not loaded — but asking to retry, not asking for a new token.
+    assert not [
+        flow
+        for flow in hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+        if flow["context"].get("source") == "reauth"
+    ]
+
+
+async def test_a_dead_token_asks_for_reauth_instead_of_looping(
+    hass, config_entry, mock_client
+):
+    """A rejection that persists is a real one.
+
+    Kinboard tokens are designed to be rotated, so this is a routine path — it
+    just has to take more than one refused poll to get here.
+    """
+    mock_client.async_get_summary.side_effect = KinboardAuthError("revoked")
+    config_entry.add_to_hass(hass)
+
+    with patch("custom_components.kinboard.KinboardClient", return_value=mock_client):
+        await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+        # A second refusal, inside the patch so no real client is built.
+        await hass.config_entries.async_reload(config_entry.entry_id)
+        await hass.async_block_till_done()
+
     assert any(
         flow["context"].get("source") == "reauth"
         for flow in hass.config_entries.flow.async_progress_by_handler(DOMAIN)

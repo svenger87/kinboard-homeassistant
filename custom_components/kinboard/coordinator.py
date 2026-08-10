@@ -40,6 +40,20 @@ _LOGGER = logging.getLogger(__name__)
 # a server that always answered `has_more` could not loop forever.
 MAX_EVENT_PAGES_PER_CYCLE = 50
 
+# How many consecutive auth rejections before believing the token is really
+# dead. One is not enough: see the note in _async_update_data.
+AUTH_FAILURES_BEFORE_REAUTH = 2
+
+# Where that count lives.
+#
+# NOT on the coordinator. A failure during the first refresh fails setup, and
+# Home Assistant then retries setup with a brand new coordinator — so a counter
+# held here would reset to zero every time and a genuinely revoked token would
+# never reach reauth at all. It would retry forever instead, which is a quieter
+# but worse failure than the one being fixed. Keyed on the entry so it survives
+# both the coordinator and a reload.
+AUTH_FAILURE_COUNTS = "auth_failure_counts"
+
 
 class KinboardCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Keeps entity state fresh and forwards Kinboard events onto the bus."""
@@ -76,10 +90,31 @@ class KinboardCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             summary = await self.client.async_get_summary()
         except KinboardAuthError as err:
-            # Triggers the reauth flow rather than looping on a dead token.
-            raise ConfigEntryAuthFailed(str(err)) from err
+            # Reauth is a one-way door: Home Assistant stops polling entirely
+            # and waits for somebody to re-enter a token. That is right for a
+            # revoked token and badly wrong for a passing one.
+            #
+            # It happened: Kinboard could not reach its database for a few
+            # seconds during a restart, answered 401 because "no such token"
+            # and "cannot check" shared a code path, and the integration went
+            # dark until a human noticed. Kinboard answers 503 now, but this
+            # side should not depend on the other side being careful.
+            #
+            # So a rejection has to persist. Two failed cycles is two minutes
+            # of a token being refused, which no restart lasts and no genuinely
+            # revoked token survives.
+            counts = self.hass.data.setdefault(DOMAIN, {}).setdefault(AUTH_FAILURE_COUNTS, {})
+            counts[self.entry.entry_id] = counts.get(self.entry.entry_id, 0) + 1
+            if counts[self.entry.entry_id] >= AUTH_FAILURES_BEFORE_REAUTH:
+                raise ConfigEntryAuthFailed(str(err)) from err
+            raise UpdateFailed(f"authentication rejected, retrying: {err}") from err
         except KinboardError as err:
             raise UpdateFailed(str(err)) from err
+
+        # Got a good answer, so any earlier rejection was transient.
+        self.hass.data.get(DOMAIN, {}).get(AUTH_FAILURE_COUNTS, {}).pop(
+            self.entry.entry_id, None
+        )
 
         # Event delivery rides the same interval for now. When the WebSocket
         # transport lands this moves to a push subscription; the cursor

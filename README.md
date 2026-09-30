@@ -155,4 +155,4 @@ The entity, service and event names are a published contract, frozen in [`const.
 
 ## Licence
 
-MIT, matching Kinboard.
+MIT. Kinboard itself is licensed under PolyForm Noncommercial 1.0.0 for releases after v1.12.1-rc.3; this integration talks to it only over its HTTP API and stays MIT.

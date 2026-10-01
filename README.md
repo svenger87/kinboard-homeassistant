@@ -91,9 +91,9 @@ A call made without the matching scope fails with a message that says so, rather
 | `sensor.kinboard_meal_today` | what's for dinner | recipe reference |
 | `sensor.kinboard_meal_tomorrow` | tomorrow's dinner | recipe reference |
 | `sensor.kinboard_next_waste_collection` | **which bin** goes out next | `type`, `date`, `days_until`, the next few |
-| `sensor.<child>_pocket_money` | one per child, their balance | currency as the unit |
-| `sensor.<child>_<goal>` | one per active saving goal, as a percentage | `saved`, `target`, `currency` |
-| `binary_sensor.kinboard_attention_required` | whether the board has something outstanding | count, and the top item |
+| `sensor.kinboard_<child>_pocket_money` | one per child, their balance | currency as the unit |
+| `sensor.kinboard_<child>_<goal>` | one per active saving goal, as a percentage | `saved`, `target`, `currency` |
+| `binary_sensor.kinboard_attention_required` | whether the board has something outstanding | `count`, `top` (its title), `top_key`, `items` (key and title, at most ten) |
 | `sensor.kinboard_display_mode` | which part of the day it is | `morning` · `afternoon` · `evening` · `quiet` |
 
 The state is deliberately the **human answer**, not a count — Home Assistant shows the state on a card and hides attributes, so "Next birthday: 0" told nobody it was Nora's. The counts are still there as attributes.
@@ -114,7 +114,34 @@ Each list keeps **Kinboard's own meaning** for deletion rather than inventing a 
 
 `kinboard.add_shopping_item` · `create_task` · `create_note` · `add_pocket_money` · `dismiss_attention` · `refresh_integration`.
 
-`add_pocket_money` takes an amount in currency units — `2.50` means €2.50 — and follows Kinboard's own deposit path, so the balance moves and the child's avatar tier is credited, not just a transaction row.
+Each service shows its fields with a description under **Developer tools → Actions**.
+
+**`add_pocket_money`** — pick the child with `entity_id`, their pocket money sensor; the picker lists only those sensors. Automations that already know the child's Kinboard `person_id` can pass that instead. Give exactly one of the two. `amount` is in currency units — `2.50` means €2.50, negative takes money away — and `reason` shows up in the child's history. It follows Kinboard's own deposit path, so the balance moves and the child's avatar tier is credited, not just a transaction row.
+
+```yaml
+action: kinboard.add_pocket_money
+data:
+  entity_id: sensor.kinboard_mia_pocket_money
+  amount: 2.50
+  reason: Rasen gemäht
+```
+
+**`dismiss_attention`** — with no `attention_id` it dismisses the item on top, the one `binary_sensor.kinboard_attention_required` names in `top` and `top_key`. To dismiss a specific one, pass its key from the sensor's `items`. If nothing is outstanding the call says so rather than silently doing nothing.
+
+```yaml
+# A button by the door says "seen it" to whatever the board is showing.
+triggers:
+  - trigger: state
+    entity_id: input_button.gesehen
+conditions:
+  - condition: state
+    entity_id: binary_sensor.kinboard_attention_required
+    state: "on"
+actions:
+  - action: kinboard.dismiss_attention
+```
+
+Both need a Kinboard that includes the fix for [svenger87/kinboard#309](https://github.com/svenger87/kinboard/issues/309). Earlier versions read different field names and refuse every call from Home Assistant; the error now says that it is Kinboard that needs updating. The attention sensor's `top_key` and `items` likewise appear only once Kinboard sends them — an older one gives you `count` and `top`.
 
 Two more are declared and answer *"not implemented yet"* rather than *"unknown"*, so you can tell a typo from a feature that hasn't shipped: `show_announcement` and `activate_context`. Both wait on Kinboard features that do not exist yet.
 

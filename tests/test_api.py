@@ -14,6 +14,7 @@ from custom_components.kinboard.api import (
     KinboardAuthError,
     KinboardClient,
     KinboardConnectionError,
+    KinboardRequestError,
     KinboardVersionError,
 )
 
@@ -80,6 +81,27 @@ async def test_server_error_is_a_connection_error(hass, aioclient_mock):
     aioclient_mock.get(f"{API}/info", status=500)
     with pytest.raises(KinboardConnectionError):
         await _client(hass).async_get_info()
+
+
+async def test_a_400_carries_the_servers_reason(hass, aioclient_mock):
+    """"400 Bad Request" hid for months that Kinboard wanted other field names.
+    Its own `error` text says which, so that is what is raised."""
+    aioclient_mock.post(
+        f"{API}/services/add_pocket_money",
+        status=400,
+        json={"error": "`person` and a non-zero `amount` are required", "code": "invalid_request"},
+        headers=JSON,
+    )
+    with pytest.raises(KinboardRequestError, match="`person` and a non-zero `amount`"):
+        await _client(hass).async_call_service(
+            "add_pocket_money", {"person_id": "p", "amount": 1}, idempotency_key="k"
+        )
+
+
+async def test_a_400_without_a_body_is_still_a_request_error(hass, aioclient_mock):
+    aioclient_mock.post(f"{API}/services/dismiss_attention", status=400)
+    with pytest.raises(KinboardRequestError, match="HTTP 400"):
+        await _client(hass).async_call_service("dismiss_attention", {}, idempotency_key="k")
 
 
 async def test_writes_carry_an_idempotency_key(hass, aioclient_mock):

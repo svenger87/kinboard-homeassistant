@@ -42,6 +42,19 @@ class KinboardVersionError(KinboardError):
     """Kinboard is reachable but too old to serve the Integration API."""
 
 
+class KinboardRequestError(KinboardConnectionError):
+    """Kinboard understood the request and refused it (HTTP 400).
+
+    Carries the server's own explanation. "400 Bad Request" alone told nobody
+    that the server wanted a field under a different name, which is exactly
+    how add_pocket_money and dismiss_attention failed for their first months.
+
+    A subclass of the connection error only so that every caller which already
+    handled a 400 as one keeps doing so unchanged; the service handler is the
+    one place that catches it separately.
+    """
+
+
 class KinboardClient:
     """Talks to one Kinboard instance with one integration token."""
 
@@ -95,6 +108,17 @@ class KinboardClient:
                     raise KinboardVersionError(
                         f"{path} not found — this Kinboard may be older than the "
                         "Integration API"
+                    )
+                if response.status == 400:
+                    reason = None
+                    try:
+                        body = await response.json(content_type=None)
+                        if isinstance(body, dict):
+                            reason = body.get("error")
+                    except (ValueError, aiohttp.ClientError):
+                        pass
+                    raise KinboardRequestError(
+                        str(reason) if reason else f"{method} {path} rejected with HTTP 400"
                     )
                 response.raise_for_status()
                 if response.content_type == "application/json":

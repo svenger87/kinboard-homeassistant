@@ -73,7 +73,19 @@ SUMMARY: dict[str, Any] = {
          "percent": 50, "currency": "EUR"},
     ],
     "display_mode": "morning",
-    "attention_required": False,
+    "attention_required": True,
+    # A sibling of attention_required, shaped as the server sends it since
+    # svenger87/kinboard#309: `top_key` and `items` were added then, to the
+    # older {count, top}.
+    "attention": {
+        "count": 2,
+        "top": "Zahnarzt-Termin bestaetigen",
+        "top_key": "dentist:2026-08-12",
+        "items": [
+            {"key": "dentist:2026-08-12", "title": "Zahnarzt-Termin bestaetigen", "priority": 80},
+            {"key": "permission-slip:mia", "title": "Elternbrief unterschreiben", "priority": 40},
+        ],
+    },
     "pocket_money": [
         {"person_id": "child-1", "name": "Mia", "balance": 12.5, "currency": "EUR"},
     ],

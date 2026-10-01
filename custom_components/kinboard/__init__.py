@@ -171,8 +171,8 @@ SERVICE_SCHEMAS: dict[str, vol.Schema] = {
 # somebody it is the server that needs the update.
 _OLD_SERVER_HINT = (
     " If Kinboard says a field is required that this call did send, Kinboard "
-    "itself is older than the fix for this service (svenger87/kinboard#309) "
-    "and needs updating."
+    "itself is older than 1.13.0-rc.1, the first release with the fix for this "
+    "service (svenger87/kinboard#309), and needs updating."
 )
 
 

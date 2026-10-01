@@ -70,7 +70,7 @@ Tick only what the integration needs. Nothing is granted by default, and **no pe
 | `family:read` | every sensor, and the calendar — the minimum |
 | `events:read` | the events on the Home Assistant bus |
 | `shopping:write` | the shopping to-do list, `kinboard.add_shopping_item` |
-| `tasks:write` | the task to-do list, `kinboard.create_task` |
+| `tasks:write` | the task to-do list, `kinboard.create_task`, `kinboard.add_pocket_money`, `kinboard.dismiss_attention` |
 | `notes:write` | `kinboard.create_note` |
 
 A call made without the matching scope fails with a message that says so, rather than a bare `403`.

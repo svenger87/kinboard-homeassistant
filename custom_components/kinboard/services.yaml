@@ -33,15 +33,29 @@ activate_context:
     context_id: { required: true,  selector: { text: } }
     duration:   { required: false, selector: { number: { min: 5, max: 86400, unit_of_measurement: s } } }
 
+# attention_id is optional since 1.1.0: leave it out to dismiss whatever is on
+# top, the item binary_sensor.kinboard_attention_required names as `top_key`.
 dismiss_attention:
   fields:
-    attention_id: { required: true, selector: { text: } }
+    attention_id: { required: false, selector: { text: } }
 
+# Pick the child by their pocket money sensor (entity_id) or pass person_id —
+# exactly one. The picker is narrowed by device class, which only these
+# sensors carry. `mode: box` because a slider from -1000 to 1000 cannot land on
+# 2.50, and the range is a sanity bound for a typo, not a policy.
 add_pocket_money:
   fields:
-    person_id: { required: true, selector: { text: } }
-    amount:    { required: true, selector: { number: { min: -1000, max: 1000, step: 0.01 } } }
-    reason:    { required: true, selector: { text: } }
+    entity_id:
+      required: false
+      selector:
+        entity:
+          filter:
+            integration: kinboard
+            domain: sensor
+            device_class: monetary
+    person_id: { required: false, selector: { text: } }
+    amount:    { required: true,  selector: { number: { min: -1000, max: 1000, step: 0.01, mode: box } } }
+    reason:    { required: true,  selector: { text: } }
 
 refresh_integration:
   fields:

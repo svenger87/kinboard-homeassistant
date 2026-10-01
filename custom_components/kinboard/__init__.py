@@ -19,17 +19,18 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import slugify
 
-from .api import KinboardAuthError, KinboardClient, KinboardError
+from .api import KinboardAuthError, KinboardClient, KinboardError, KinboardRequestError
 from .const import (
     CONF_BASE_URL,
     CONF_TOKEN,
     DOMAIN,
+    SENSOR_POCKET_MONEY_PREFIX,
     SERVICE_ACTIVATE_CONTEXT,
     SERVICE_ADD_POCKET_MONEY,
     SERVICE_ADD_SHOPPING_ITEM,
@@ -139,6 +140,120 @@ async def async_unload_entry(hass: HomeAssistant, entry: KinboardConfigEntry) ->
     return unloaded
 
 
+# Services whose arguments the integration fills in or translates before they
+# go to Kinboard. Everything else is passed through as given.
+SERVICE_SCHEMAS: dict[str, vol.Schema] = {
+    SERVICE_ADD_POCKET_MONEY: vol.Schema(
+        {
+            vol.Optional("entry_id"): cv.string,
+            vol.Optional("entity_id"): cv.entity_id,
+            vol.Optional("person_id"): cv.string,
+            # Coerced because a YAML automation can just as easily send "2.50"
+            # as 2.50, and Kinboard only accepts a JSON number.
+            vol.Required("amount"): vol.Coerce(float),
+            vol.Optional("reason"): cv.string,
+        },
+        extra=vol.ALLOW_EXTRA,
+    ),
+    SERVICE_DISMISS_ATTENTION: vol.Schema(
+        {
+            vol.Optional("entry_id"): cv.string,
+            vol.Optional("attention_id"): cv.string,
+        },
+        extra=vol.ALLOW_EXTRA,
+    ),
+}
+
+# Appended when Kinboard refuses one of the two services that a Kinboard
+# release before svenger87/kinboard#309 could not accept from Home Assistant
+# at all: it read other field names than RFC-001 gives, so every call was a
+# 400. The payload here is the RFC's and stays so; the hint is what tells
+# somebody it is the server that needs the update.
+_OLD_SERVER_HINT = (
+    " If Kinboard says a field is required that this call did send, Kinboard "
+    "itself is older than the fix for this service (svenger87/kinboard#309) "
+    "and needs updating."
+)
+
+
+def _pocket_money_entry_id(hass: HomeAssistant, entity_id: str) -> str:
+    """The config entry a pocket-money sensor belongs to, validating it is one."""
+    reg_entry = er.async_get(hass).async_get(entity_id)
+    if (
+        reg_entry is None
+        or reg_entry.platform != DOMAIN
+        or reg_entry.domain != "sensor"
+        or reg_entry.config_entry_id is None
+        or f"_{SENSOR_POCKET_MONEY_PREFIX}_" not in (reg_entry.unique_id or "")
+    ):
+        raise ServiceValidationError(
+            f"{entity_id} is not a Kinboard pocket money sensor. Pick one of the "
+            "sensors named \"<child> pocket money\"."
+        )
+    return reg_entry.config_entry_id
+
+
+def _pocket_money_person_id(hass: HomeAssistant, entry: ConfigEntry, entity_id: str) -> str:
+    """Map a pocket-money sensor to the Kinboard person it shows.
+
+    Read back from the entity registry's unique_id, which the sensor builds as
+    "<family>_pocket_money_<person_id>". The registry rather than the live
+    entity object, so this still answers while the sensor is unavailable — a
+    child whose purse did not come back in the last poll can still be paid.
+    """
+    reg_entry = er.async_get(hass).async_get(entity_id)
+    prefix = f"{entry.unique_id}_{SENSOR_POCKET_MONEY_PREFIX}_"
+    if reg_entry is None or not (reg_entry.unique_id or "").startswith(prefix):
+        raise ServiceValidationError(
+            f"{entity_id} belongs to a different Kinboard family than the one this "
+            "call is for."
+        )
+    return reg_entry.unique_id[len(prefix):]
+
+
+def _add_pocket_money_payload(
+    hass: HomeAssistant, entry: ConfigEntry, data: dict[str, Any]
+) -> dict[str, Any]:
+    entity_id = data.get("entity_id")
+    person_id = data.get("person_id")
+    if bool(entity_id) == bool(person_id):
+        raise ServiceValidationError(
+            "add_pocket_money needs exactly one of entity_id (the child's pocket "
+            "money sensor) or person_id."
+        )
+    amount = data["amount"]
+    if amount == 0:
+        raise ServiceValidationError("add_pocket_money needs a non-zero amount.")
+
+    payload = {k: v for k, v in data.items() if k != "entity_id"}
+    if entity_id:
+        payload["person_id"] = _pocket_money_person_id(hass, entry, entity_id)
+    return payload
+
+
+def _dismiss_attention_payload(
+    coordinator: KinboardCoordinator, data: dict[str, Any]
+) -> dict[str, Any]:
+    if data.get("attention_id"):
+        return dict(data)
+
+    # Without an id, dismiss what the board is showing on top — the item the
+    # binary sensor's `top` attribute names. Read from the last poll rather
+    # than a fresh one: that is what the household last saw, and an
+    # automation reacting to the sensor is reacting to exactly this data.
+    attention = (coordinator.data or {}).get("attention")
+    attention = attention if isinstance(attention, dict) else {}
+    top_key = attention.get("top_key")
+    if top_key:
+        return {**data, "attention_id": top_key}
+    if attention.get("count") and "top_key" not in attention:
+        raise ServiceValidationError(
+            "This Kinboard does not say which attention item is on top, so there is "
+            "nothing to dismiss by default. Pass attention_id, or update Kinboard."
+        )
+    raise ServiceValidationError("Nothing is outstanding on Kinboard, so there is nothing to dismiss.")
+
+
 def _async_register_services(hass: HomeAssistant) -> None:
     """Register the services from RFC-001 section 5.2, once per domain."""
     if hass.services.has_service(DOMAIN, SERVICE_ADD_SHOPPING_ITEM):
@@ -153,10 +268,22 @@ def _async_register_services(hass: HomeAssistant) -> None:
         # more than one family configured. Target explicitly when ambiguous
         # rather than silently picking one.
         entry_id = call.data.get("entry_id")
+        if (
+            not entry_id
+            and call.service == SERVICE_ADD_POCKET_MONEY
+            and call.data.get("entity_id")
+            and not call.data.get("person_id")
+        ):
+            # The picked child already says which family this is for.
+            entry_id = _pocket_money_entry_id(hass, call.data["entity_id"])
         if entry_id:
             entry = hass.config_entries.async_get_entry(entry_id)
             if entry is None or entry.domain != DOMAIN:
                 raise HomeAssistantError(f"Unknown Kinboard entry: {entry_id}")
+            if entry not in entries:
+                # Now reachable without naming an entry, through a picked child
+                # whose family failed to set up; it has no client to call with.
+                raise HomeAssistantError(f"Kinboard family {entry.title} is not loaded.")
         elif len(entries) > 1:
             raise HomeAssistantError(
                 "More than one Kinboard family is configured — pass entry_id to "
@@ -167,6 +294,10 @@ def _async_register_services(hass: HomeAssistant) -> None:
 
         coordinator: KinboardCoordinator = entry.runtime_data
         payload = {k: v for k, v in call.data.items() if k != "entry_id"}
+        if call.service == SERVICE_ADD_POCKET_MONEY:
+            payload = _add_pocket_money_payload(hass, entry, payload)
+        elif call.service == SERVICE_DISMISS_ATTENTION:
+            payload = _dismiss_attention_payload(coordinator, payload)
         try:
             await coordinator.client.async_call_service(
                 call.service, payload, idempotency_key=str(uuid.uuid4())
@@ -178,6 +309,13 @@ def _async_register_services(hass: HomeAssistant) -> None:
                 f"Kinboard rejected {call.service}: the integration token may "
                 f"lack the required scope ({err})"
             ) from err
+        except KinboardRequestError as err:
+            hint = (
+                _OLD_SERVER_HINT
+                if call.service in (SERVICE_ADD_POCKET_MONEY, SERVICE_DISMISS_ATTENTION)
+                else ""
+            )
+            raise HomeAssistantError(f"Kinboard refused {call.service}: {err}.{hint}") from err
         except KinboardError as err:
             raise HomeAssistantError(f"Kinboard call {call.service} failed: {err}") from err
 
@@ -187,5 +325,8 @@ def _async_register_services(hass: HomeAssistant) -> None:
 
     for service in ALL_SERVICES:
         hass.services.async_register(
-            DOMAIN, service, _handle, schema=vol.Schema({}, extra=vol.ALLOW_EXTRA)
+            DOMAIN,
+            service,
+            _handle,
+            schema=SERVICE_SCHEMAS.get(service, vol.Schema({}, extra=vol.ALLOW_EXTRA)),
         )

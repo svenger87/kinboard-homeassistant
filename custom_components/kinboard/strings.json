@@ -84,5 +84,147 @@
         "name": "Family calendar"
       }
     }
+  },
+  "services": {
+    "add_shopping_item": {
+      "name": "Add shopping item",
+      "description": "Adds an item to the Kinboard shopping list.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "What to buy."
+        },
+        "quantity": {
+          "name": "Quantity",
+          "description": "How much, as free text. Accepted for the future; Kinboard does not store it yet."
+        },
+        "category": {
+          "name": "Category",
+          "description": "A shopping list category. Accepted for the future; Kinboard does not store it yet."
+        }
+      }
+    },
+    "create_task": {
+      "name": "Create task",
+      "description": "Creates a task on the Kinboard task list.",
+      "fields": {
+        "title": {
+          "name": "Title",
+          "description": "What needs doing."
+        },
+        "person_id": {
+          "name": "Person ID",
+          "description": "The Kinboard person the task is assigned to. Leave empty for the whole family."
+        },
+        "due_at": {
+          "name": "Due",
+          "description": "The day the task is due. Kinboard keeps the date and drops any time."
+        },
+        "priority": {
+          "name": "Priority",
+          "description": "From 0 to 100. Accepted for the future; Kinboard does not store it yet."
+        }
+      }
+    },
+    "create_note": {
+      "name": "Create note",
+      "description": "Pins a note to the Kinboard board.",
+      "fields": {
+        "text": {
+          "name": "Text",
+          "description": "The note itself."
+        },
+        "expires_at": {
+          "name": "Expires",
+          "description": "When the note should disappear. Accepted for the future; Kinboard does not store it yet."
+        },
+        "color": {
+          "name": "Color",
+          "description": "The note's color. Accepted for the future; Kinboard does not store it yet."
+        }
+      }
+    },
+    "show_announcement": {
+      "name": "Show announcement",
+      "description": "Shows an announcement on Kinboard's screens. Not available yet: Kinboard answers \"not implemented\".",
+      "fields": {
+        "title": {
+          "name": "Title",
+          "description": "The announcement's headline."
+        },
+        "message": {
+          "name": "Message",
+          "description": "The announcement's text."
+        },
+        "severity": {
+          "name": "Severity",
+          "description": "How prominently to show it."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "How long to show it, in seconds."
+        },
+        "target_devices": {
+          "name": "Devices",
+          "description": "Which Kinboard screens to show it on. Leave empty for all of them."
+        }
+      }
+    },
+    "activate_context": {
+      "name": "Activate context",
+      "description": "Switches Kinboard into a context, such as a holiday mode. Not available yet: Kinboard answers \"not implemented\".",
+      "fields": {
+        "context_id": {
+          "name": "Context ID",
+          "description": "Which context to switch to."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "How long the context lasts, in seconds."
+        }
+      }
+    },
+    "dismiss_attention": {
+      "name": "Dismiss attention item",
+      "description": "Dismisses something Kinboard is asking the family to look at. Leave the ID empty to dismiss the top item.",
+      "fields": {
+        "attention_id": {
+          "name": "Attention item key",
+          "description": "The item to dismiss, as listed under `items` on the Attention required sensor. Leave empty to dismiss the top item (`top_key`)."
+        }
+      }
+    },
+    "add_pocket_money": {
+      "name": "Add pocket money",
+      "description": "Pays pocket money to a child, or takes it away with a negative amount.",
+      "fields": {
+        "entity_id": {
+          "name": "Child",
+          "description": "The child's pocket money sensor. Use this or the person ID, not both."
+        },
+        "person_id": {
+          "name": "Person ID",
+          "description": "The child's Kinboard person ID, for automations that already have it. Use this or the child's sensor, not both."
+        },
+        "amount": {
+          "name": "Amount",
+          "description": "In currency units: 2.50 means 2.50. Negative takes money away."
+        },
+        "reason": {
+          "name": "Reason",
+          "description": "Shown in the child's pocket money history."
+        }
+      }
+    },
+    "refresh_integration": {
+      "name": "Refresh integration",
+      "description": "Asks Kinboard to re-check what needs the family's attention now, instead of waiting for its next scheduled run.",
+      "fields": {
+        "integration_id": {
+          "name": "Integration ID",
+          "description": "Which integration to refresh. Reserved: Kinboard currently re-checks everything."
+        }
+      }
+    }
   }
 }

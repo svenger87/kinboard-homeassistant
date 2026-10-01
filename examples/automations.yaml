@@ -1,4 +1,4 @@
-# Ten automations you can paste straight into automations.yaml.
+# Twelve automations you can paste straight into automations.yaml.
 #
 # Every entity, service and event named here is part of the published contract
 # (RFC-001), and a test in this repository fails if one of them stops existing —
@@ -228,3 +228,28 @@
       data:
         title: "Essensplan"
         message: "Für morgen ist noch nichts eingeplant."
+
+- id: kinboard_button_dismisses_the_top_item
+  alias: "Kinboard: a button says \"seen it\" to the top attention item"
+  description: >-
+    dismiss_attention without an attention_id dismisses whatever the board shows
+    on top — the item binary_sensor.kinboard_attention_required names in its
+    `top` and `top_key` attributes. The spoken title comes from `top`, read
+    before the call, so it names the item that was actually dismissed.
+    Needs Kinboard with the fix for svenger87/kinboard#309.
+  mode: single
+  triggers:
+    - trigger: state
+      entity_id: input_button.gesehen
+  conditions:
+    - condition: state
+      entity_id: binary_sensor.kinboard_attention_required
+      state: "on"
+  actions:
+    - variables:
+        dismissed: "{{ state_attr('binary_sensor.kinboard_attention_required', 'top') }}"
+    - action: kinboard.dismiss_attention
+    - action: notify.notify
+      data:
+        title: "Kinboard"
+        message: "Erledigt: {{ dismissed }}"

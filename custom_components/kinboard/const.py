@@ -101,7 +101,7 @@ SERVICE_REQUIRED_SCOPES: Final[dict[str, str]] = {
     SERVICE_CREATE_NOTE: "notes:write",
     SERVICE_SHOW_ANNOUNCEMENT: "announcements:write",
     SERVICE_ACTIVATE_CONTEXT: "announcements:write",
-    SERVICE_DISMISS_ATTENTION: "announcements:write",
+    SERVICE_DISMISS_ATTENTION: "tasks:write",
     SERVICE_ADD_POCKET_MONEY: "tasks:write",
     SERVICE_REFRESH_INTEGRATION: "family:read",
 }

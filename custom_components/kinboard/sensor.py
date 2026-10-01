@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.components.sensor import (
+    SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
     SensorStateClass,
@@ -113,6 +114,11 @@ async def async_setup_entry(
 class KinboardPocketMoney(KinboardEntity, SensorEntity):
     """One child's pocket money balance."""
 
+    # Monetary is what a balance is, and it is also what lets the
+    # add_pocket_money service offer an entity picker narrowed to exactly these
+    # sensors: a selector can filter on integration and device class, but not
+    # on anything finer. Saving goals are percentages and stay out of it.
+    _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
 
     def __init__(self, coordinator, person_id: str, name: str) -> None:

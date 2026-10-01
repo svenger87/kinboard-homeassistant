@@ -43,7 +43,7 @@ into a real Home Assistant by the test suite on every CI run.
 
 ## Requirements
 
-- **Kinboard 1.9.0 or newer**, reachable from Home Assistant.
+- **Kinboard 1.9.0 or newer**, reachable from Home Assistant — **1.13.0-rc.1 or newer** for `add_pocket_money`, `dismiss_attention` and the attention sensor's `top_key`/`items`.
 - Home Assistant 2024.10 or newer.
 
 ## Install
@@ -141,7 +141,7 @@ actions:
   - action: kinboard.dismiss_attention
 ```
 
-Both need a Kinboard that includes the fix for [svenger87/kinboard#309](https://github.com/svenger87/kinboard/issues/309). Earlier versions read different field names and refuse every call from Home Assistant; the error now says that it is Kinboard that needs updating. The attention sensor's `top_key` and `items` likewise appear only once Kinboard sends them — an older one gives you `count` and `top`.
+Both need **Kinboard 1.13.0-rc.1 or newer**, the first release with the fix for [svenger87/kinboard#309](https://github.com/svenger87/kinboard/issues/309). Earlier versions read different field names and refuse every call from Home Assistant; the error now says that it is Kinboard that needs updating. The attention sensor's `top_key` and `items` likewise appear only once Kinboard sends them — an older one gives you `count` and `top`.
 
 Two more are declared and answer *"not implemented yet"* rather than *"unknown"*, so you can tell a typo from a feature that hasn't shipped: `show_announcement` and `activate_context`. Both wait on Kinboard features that do not exist yet.
 

@@ -22,14 +22,22 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import slugify
 
-from .api import KinboardAuthError, KinboardClient, KinboardError, KinboardRequestError
+from .api import (
+    KinboardAuthError,
+    KinboardClient,
+    KinboardError,
+    KinboardRateLimitError,
+    KinboardRequestError,
+)
 from .const import (
     CONF_BASE_URL,
     CONF_TOKEN,
     DOMAIN,
+    ISSUE_SHOW_CAMERA_FORBIDDEN,
     SENSOR_POCKET_MONEY_PREFIX,
     SERVICE_ACTIVATE_CONTEXT,
     SERVICE_ADD_POCKET_MONEY,
@@ -38,9 +46,12 @@ from .const import (
     SERVICE_CREATE_TASK,
     SERVICE_DISMISS_ATTENTION,
     SERVICE_REFRESH_INTEGRATION,
+    SERVICE_REQUIRED_SCOPES,
     SERVICE_SHOW_ANNOUNCEMENT,
+    SERVICE_SHOW_CAMERA,
 )
 from .coordinator import KinboardCoordinator
+from .doorbell import DoorbellWatcher
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,7 +71,12 @@ ALL_SERVICES = (
     SERVICE_DISMISS_ATTENTION,
     SERVICE_ADD_POCKET_MONEY,
     SERVICE_REFRESH_INTEGRATION,
+    SERVICE_SHOW_CAMERA,
 )
+
+# Services that change nothing a sensor reports, so a call is not followed by
+# a refresh of the summary.
+NO_REFRESH_SERVICES = frozenset({SERVICE_SHOW_CAMERA})
 
 # Plain alias rather than PEP 695 `type ... = ...`: that form needs Python
 # 3.12, which Home Assistant has but many contributors' local interpreters do
@@ -80,7 +96,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: KinboardConfigEntry) -> 
     _async_adopt_contract_entity_ids(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _async_register_services(hass)
+
+    # After the platforms, so a doorbell that is one of this entry's own
+    # entities already exists. Never fails setup: a Kinboard without cameras
+    # is an ordinary Kinboard.
+    watcher = DoorbellWatcher(hass, entry, client)
+    coordinator.doorbells = watcher
+    entry.async_on_unload(watcher.async_stop)
+    await watcher.async_start()
     return True
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Drop the repair issue a removed family can no longer fix."""
+    ir.async_delete_issue(hass, DOMAIN, f"{ISSUE_SHOW_CAMERA_FORBIDDEN}_{entry.entry_id}")
 
 
 def _async_adopt_contract_entity_ids(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -161,6 +190,24 @@ SERVICE_SCHEMAS: dict[str, vol.Schema] = {
             vol.Optional("attention_id"): cv.string,
         },
         extra=vol.ALLOW_EXTRA,
+    ),
+    # Closed, unlike the others: Kinboard reads exactly these three fields,
+    # and a misspelt `durration` silently falling back to 60 s is worse than
+    # being told.
+    SERVICE_SHOW_CAMERA: vol.Schema(
+        {
+            vol.Optional("entry_id"): cv.string,
+            vol.Required("camera"): vol.All(cv.string, vol.Strip, vol.Length(min=1)),
+            # Kinboard takes whole seconds only; the slider can send 30.0.
+            vol.Optional("duration"): vol.All(
+                vol.Coerce(float), vol.Range(min=5, max=300), vol.Coerce(int)
+            ),
+            # A cleared field in the UI arrives as [] or [""]; Kinboard refuses
+            # an empty list, and "no screens named" means "the usual screens".
+            vol.Optional("target_devices"): vol.All(
+                cv.ensure_list, [cv.string], lambda refs: [r.strip() for r in refs if r.strip()]
+            ),
+        }
     ),
 }
 
@@ -299,15 +346,31 @@ def _async_register_services(hass: HomeAssistant) -> None:
         elif call.service == SERVICE_DISMISS_ATTENTION:
             payload = _dismiss_attention_payload(coordinator, payload)
         try:
-            await coordinator.client.async_call_service(
-                call.service, payload, idempotency_key=str(uuid.uuid4())
-            )
+            if call.service == SERVICE_SHOW_CAMERA:
+                await coordinator.client.async_show_camera(
+                    payload["camera"],
+                    duration=payload.get("duration"),
+                    target_devices=payload.get("target_devices"),
+                    idempotency_key=str(uuid.uuid4()),
+                )
+            else:
+                await coordinator.client.async_call_service(
+                    call.service, payload, idempotency_key=str(uuid.uuid4())
+                )
         except KinboardAuthError as err:
             # Most often a scope the token does not carry. Say so, rather than
             # letting "403" reach the user.
+            scope = SERVICE_REQUIRED_SCOPES.get(call.service)
+            needed = f" {scope}" if scope else ""
             raise HomeAssistantError(
                 f"Kinboard rejected {call.service}: the integration token may "
-                f"lack the required scope ({err})"
+                f"lack the required scope{needed} ({err})"
+            ) from err
+        except KinboardRateLimitError as err:
+            wait = f" Try again in {err.retry_after} s." if err.retry_after else ""
+            raise HomeAssistantError(
+                f"Kinboard is rate limiting {call.service}: too many calls in a short "
+                f"time.{wait}"
             ) from err
         except KinboardRequestError as err:
             hint = (
@@ -321,7 +384,8 @@ def _async_register_services(hass: HomeAssistant) -> None:
 
         # A write may change what the sensors report, so refresh rather than
         # leaving HA showing stale counts until the next poll.
-        await coordinator.async_request_refresh()
+        if call.service not in NO_REFRESH_SERVICES:
+            await coordinator.async_request_refresh()
 
     for service in ALL_SERVICES:
         hass.services.async_register(

@@ -91,6 +91,8 @@ SERVICE_ACTIVATE_CONTEXT: Final = "activate_context"
 SERVICE_DISMISS_ATTENTION: Final = "dismiss_attention"
 SERVICE_ADD_POCKET_MONEY: Final = "add_pocket_money"
 SERVICE_REFRESH_INTEGRATION: Final = "refresh_integration"
+# Puts a camera on the wall displays. Kinboard 1.13.0-rc.6 and newer.
+SERVICE_SHOW_CAMERA: Final = "show_camera"
 
 # Each service needs a scope on the integration token. The config flow shows
 # which scopes the supplied token is missing rather than letting the call fail
@@ -104,7 +106,37 @@ SERVICE_REQUIRED_SCOPES: Final[dict[str, str]] = {
     SERVICE_DISMISS_ATTENTION: "tasks:write",
     SERVICE_ADD_POCKET_MONEY: "tasks:write",
     SERVICE_REFRESH_INTEGRATION: "family:read",
+    SERVICE_SHOW_CAMERA: "announcements:write",
 }
+
+# --------------------------------------------------------------------------
+# Doorbells: a ring puts that doorbell's camera on the wall displays
+# --------------------------------------------------------------------------
+# Which doorbell belongs to which camera is set in Kinboard (Settings →
+# Cameras) and read from GET /cameras, so the integration polls it.
+
+# How often the doorbell → camera mapping is re-read. Not the coordinator's
+# minute: the mapping changes when somebody edits a camera, a few times a
+# year, and a request a minute for it would be most of this integration's
+# traffic. Five minutes is how long a new doorbell waits before it works.
+DOORBELL_REFRESH_INTERVAL_SECONDS: Final = 300
+
+# A bell rings at most one takeover per this many seconds. Kinboard allows
+# five show_camera calls per ten minutes per token; a bouncing contact or an
+# impatient visitor would otherwise spend that budget in a few seconds and
+# leave the next real ring answered 429.
+DOORBELL_DEBOUNCE_SECONDS: Final = 10
+
+# The doorbell entity domains the watcher understands, and how each rings:
+# a binary sensor turns on, the others record the time of their last press.
+DOORBELL_DOMAINS: Final[frozenset[str]] = frozenset(
+    {"binary_sensor", "event", "button", "input_button"}
+)
+
+# How recent a press timestamp must be to count as a ring. See doorbell.py.
+DOORBELL_PRESS_MAX_AGE_SECONDS: Final = 30
+
+ISSUE_SHOW_CAMERA_FORBIDDEN: Final = "show_camera_forbidden"
 
 # --------------------------------------------------------------------------
 # Events Kinboard emits onto the Home Assistant bus (RFC-001 section 5.3)

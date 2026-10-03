@@ -108,6 +108,8 @@ def mock_client() -> AsyncMock:
     client.async_get_events.return_value = {"events": [], "has_more": False}
     client.async_get_calendar_events.return_value = []
     client.async_get_list.return_value = []
+    # No doorbells unless a test gives some: the watcher then listens to nothing.
+    client.async_get_cameras.return_value = []
     return client
 
 

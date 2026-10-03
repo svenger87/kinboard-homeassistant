@@ -14,6 +14,7 @@ from custom_components.kinboard.api import (
     KinboardAuthError,
     KinboardClient,
     KinboardConnectionError,
+    KinboardRateLimitError,
     KinboardRequestError,
     KinboardVersionError,
 )
@@ -134,3 +135,82 @@ async def test_list_and_event_readers_survive_a_junk_body(hass, aioclient_mock):
     """
     aioclient_mock.get(f"{API}/lists/shopping", json=["not", "a", "dict"], headers=JSON)
     assert await _client(hass).async_get_list("shopping") == []
+
+
+# -- cameras ------------------------------------------------------------------
+
+
+async def test_cameras_carry_their_doorbell_or_none(hass, aioclient_mock):
+    """A Kinboard before 1.13.0-rc.7 sends no `doorbell_entity_id`: that is None."""
+    aioclient_mock.get(
+        f"{API}/cameras",
+        json={
+            "cameras": [
+                {"id": "c1", "name": "Front door", "doorbell_entity_id": "binary_sensor.ding"},
+                {"id": "c2", "name": "Garden"},
+                {"id": "c3", "name": "Hall", "doorbell_entity_id": ""},
+                {"name": "no id, ignored"},
+            ]
+        },
+        headers=JSON,
+    )
+    assert await _client(hass).async_get_cameras() == [
+        {"id": "c1", "name": "Front door", "doorbell_entity_id": "binary_sensor.ding"},
+        {"id": "c2", "name": "Garden", "doorbell_entity_id": None},
+        {"id": "c3", "name": "Hall", "doorbell_entity_id": None},
+    ]
+
+
+async def test_no_camera_list_is_a_version_error(hass, aioclient_mock):
+    aioclient_mock.get(f"{API}/cameras", status=404)
+    with pytest.raises(KinboardVersionError):
+        await _client(hass).async_get_cameras()
+
+
+async def test_show_camera_sends_only_what_it_was_given(hass, aioclient_mock):
+    """No duration means Kinboard's default, so none is sent — not a null."""
+    aioclient_mock.post(f"{API}/services/show_camera", json={"screens": 2}, headers=JSON)
+    await _client(hass).async_show_camera("cam-1")
+
+    _method, _url, body, headers = aioclient_mock.mock_calls[0]
+    assert body == {"camera": "cam-1"}
+    assert headers["Idempotency-Key"]
+    assert headers["Authorization"] == "Bearer kbi_test"
+
+
+async def test_show_camera_with_everything(hass, aioclient_mock):
+    aioclient_mock.post(f"{API}/services/show_camera", json={}, headers=JSON)
+    await _client(hass).async_show_camera(
+        "Front door", duration=30, target_devices=["Kitchen"], idempotency_key="k1"
+    )
+    _method, _url, body, headers = aioclient_mock.mock_calls[0]
+    assert body == {"camera": "Front door", "duration": 30, "target_devices": ["Kitchen"]}
+    assert headers["Idempotency-Key"] == "k1"
+
+
+async def test_every_ring_is_its_own_takeover(hass, aioclient_mock):
+    """Two rings are two calls, so they must not share an idempotency key —
+    a shared one would make the second a replay of the first."""
+    aioclient_mock.post(f"{API}/services/show_camera", json={}, headers=JSON)
+    client = _client(hass)
+    await client.async_show_camera("cam-1")
+    await client.async_show_camera("cam-1")
+    keys = {call[3]["Idempotency-Key"] for call in aioclient_mock.mock_calls}
+    assert len(keys) == 2
+
+
+async def test_429_is_a_rate_limit_with_its_retry_after(hass, aioclient_mock):
+    aioclient_mock.post(
+        f"{API}/services/show_camera", status=429, headers={"Retry-After": "120"}
+    )
+    with pytest.raises(KinboardRateLimitError) as caught:
+        await _client(hass).async_show_camera("cam-1")
+    assert caught.value.retry_after == 120
+
+
+@pytest.mark.parametrize("status", [401, 403])
+async def test_an_auth_error_says_which_status(hass, aioclient_mock, status):
+    aioclient_mock.post(f"{API}/services/show_camera", status=status)
+    with pytest.raises(KinboardAuthError) as caught:
+        await _client(hass).async_show_camera("cam-1")
+    assert caught.value.status == status

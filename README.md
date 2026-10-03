@@ -19,7 +19,7 @@
 
 Most integrations point one way: Kinboard already *reads* Home Assistant, showing lights, sensors and cameras on the kitchen display. This is the other direction.
 
-Home Assistant gains what the family has on today, the family calendar, and the shopping and task lists as real to-do lists you can tick. Kinboard gains a way for automations to put something on the shopping list or create a task.
+Home Assistant gains what the family has on today, the family calendar, and the shopping and task lists as real to-do lists you can tick. Kinboard gains a way for automations to put something on the shopping list or create a task — and when the doorbell rings, its camera on the wall displays.
 
 ```yaml
 - alias: "Say who has a birthday when the kitchen light comes on"
@@ -43,7 +43,7 @@ into a real Home Assistant by the test suite on every CI run.
 
 ## Requirements
 
-- **Kinboard 1.9.0 or newer**, reachable from Home Assistant — **1.13.0-rc.1 or newer** for `add_pocket_money`, `dismiss_attention` and the attention sensor's `top_key`/`items`.
+- **Kinboard 1.9.0 or newer**, reachable from Home Assistant — **1.13.0-rc.1 or newer** for `add_pocket_money`, `dismiss_attention` and the attention sensor's `top_key`/`items`; **1.13.0-rc.6** for `show_camera`; **1.13.0-rc.7** for [doorbells](#doorbells).
 - Home Assistant 2024.10 or newer.
 
 ## Install
@@ -72,6 +72,7 @@ Tick only what the integration needs. Nothing is granted by default, and **no pe
 | `shopping:write` | the shopping to-do list, `kinboard.add_shopping_item` |
 | `tasks:write` | the task to-do list, `kinboard.create_task`, `kinboard.add_pocket_money`, `kinboard.dismiss_attention` |
 | `notes:write` | `kinboard.create_note` |
+| `announcements:write` | `kinboard.show_camera` and [doorbells](#doorbells) — shown in Kinboard as *send messages* |
 
 A call made without the matching scope fails with a message that says so, rather than a bare `403`.
 
@@ -112,7 +113,7 @@ Each list keeps **Kinboard's own meaning** for deletion rather than inventing a 
 
 ### Services
 
-`kinboard.add_shopping_item` · `create_task` · `create_note` · `add_pocket_money` · `dismiss_attention` · `refresh_integration`.
+`kinboard.add_shopping_item` · `create_task` · `create_note` · `add_pocket_money` · `dismiss_attention` · `refresh_integration` · `show_camera`.
 
 Each service shows its fields with a description under **Developer tools → Actions**.
 
@@ -143,7 +144,34 @@ actions:
 
 Both need **Kinboard 1.13.0-rc.1 or newer**, the first release with the fix for [svenger87/kinboard#309](https://github.com/svenger87/kinboard/issues/309). Earlier versions read different field names and refuse every call from Home Assistant; the error now says that it is Kinboard that needs updating. The attention sensor's `top_key` and `items` likewise appear only once Kinboard sends them — an older one gives you `count` and `top`.
 
+**`show_camera`** — puts a camera full screen on the wall displays, live and muted, and pushes it to the family's phones; the displays go back on their own. `camera` is the camera's id or its exact name from Kinboard's **Settings → Cameras**. `duration` is 5 to 300 seconds, 60 when left out. `target_devices` — screen ids or exact names — picks other screens than the wall displays. Kinboard allows five calls in ten minutes per token, so an automation stuck in a loop cannot keep taking over the walls. Needs `announcements:write` and **Kinboard 1.13.0-rc.6 or newer**.
+
+```yaml
+# Someone in the garden at night: show it in the kitchen for half a minute.
+action: kinboard.show_camera
+data:
+  camera: Garden
+  duration: 30
+  target_devices: [Kitchen]
+```
+
 Two more are declared and answer *"not implemented yet"* rather than *"unknown"*, so you can tell a typo from a feature that hasn't shipped: `show_announcement` and `activate_context`. Both wait on Kinboard features that do not exist yet.
+
+### Doorbells
+
+Pick a doorbell for a camera in Kinboard (**Settings → Cameras**), and when it rings, that camera is on the wall displays for a minute. Nothing to set up here and no automation to write: the integration reads which doorbell belongs to which camera from Kinboard every five minutes and listens to exactly those entities. Needs **Kinboard 1.13.0-rc.7 or newer** and `announcements:write`; an older Kinboard simply has no doorbells, and nothing complains.
+
+A doorbell can be any of these, and rings when:
+
+| Doorbell entity | Rings when |
+|---|---|
+| `binary_sensor` | it turns from off to on |
+| `event` | it fires (its state, the time of the last event, moves on) |
+| `button`, `input_button` | it is pressed |
+
+What does **not** ring, so a restart never takes over every screen in the house with nobody at the door: the state a doorbell has when Home Assistant starts or restores it, and a doorbell coming back from `unavailable`. A doorbell that bounces shows its camera once per ten seconds — Kinboard's limit is five in ten minutes, and a sticky contact would otherwise use it up before the visitor gives up.
+
+If the token lacks `announcements:write`, the first ring says so under **Settings → Repairs**; that clears itself on the next ring that works.
 
 ### Events
 
@@ -174,7 +202,7 @@ Every Kinboard response also carries a short reference, repeated on every log li
 docker logs kinboard-webapp 2>&1 | grep <reference>
 ```
 
-**Diagnostics** (⋮ on the integration → Download diagnostics) reports shapes and counts, never your family's data — no names, no titles, no token.
+**Diagnostics** (⋮ on the integration → Download diagnostics) reports shapes and counts, never your family's data — no names, no titles, no token. It does list which doorbell entity shows which camera id, the first thing to check when a doorbell does nothing.
 
 ## Contributing
 

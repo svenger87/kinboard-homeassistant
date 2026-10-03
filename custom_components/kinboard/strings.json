@@ -225,6 +225,30 @@
           "description": "Which integration to refresh. Reserved: Kinboard currently re-checks everything."
         }
       }
+    },
+    "show_camera": {
+      "name": "Show camera",
+      "description": "Puts a camera full screen on Kinboard's wall displays, live and muted, and sends a push to the family's phones. The displays go back on their own.",
+      "fields": {
+        "camera": {
+          "name": "Camera",
+          "description": "The camera's ID or its exact name, as Kinboard shows it under Settings → Cameras."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "How long to show it, in seconds. Leave empty for Kinboard's default of 60."
+        },
+        "target_devices": {
+          "name": "Devices",
+          "description": "Which Kinboard screens show it, by device ID or exact name. Leave empty for every wall display."
+        }
+      }
+    }
+  },
+  "issues": {
+    "show_camera_forbidden": {
+      "title": "Kinboard cannot show the doorbell camera",
+      "description": "{doorbell} rang, but Kinboard ({family}) refused to put its camera on the screens: the integration token does not have the \"send messages\" permission (`announcements:write`). In Kinboard, under Settings → Integrations, create a token that has it, then enter it here with Reconfigure. This message goes away by itself the next time a doorbell shows its camera."
     }
   }
 }

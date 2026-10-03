@@ -72,6 +72,9 @@ class KinboardCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._store: Store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY_CURSOR}.{entry.entry_id}")
         self._cursor: int | None = None
         self._cursor_loaded = False
+        # The DoorbellWatcher for this entry, set by async_setup_entry. Hung
+        # here because the coordinator is the entry's runtime_data.
+        self.doorbells: Any = None
 
     async def _load_cursor(self) -> None:
         if self._cursor_loaded:

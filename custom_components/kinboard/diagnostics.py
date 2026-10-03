@@ -51,4 +51,9 @@ async def async_get_config_entry_diagnostics(
         "summary_safe_values": {
             key: summary.get(key) for key in sorted(SAFE_SUMMARY_KEYS & set(summary))
         },
+        # Entity ids and camera ids only — what "my doorbell does nothing"
+        # needs, and nothing that says where the camera streams from.
+        "doorbells": coordinator.doorbells.diagnostics()
+        if coordinator.doorbells is not None
+        else None,
     }

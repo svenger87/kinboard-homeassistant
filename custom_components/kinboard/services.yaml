@@ -60,3 +60,12 @@ add_pocket_money:
 refresh_integration:
   fields:
     integration_id: { required: true, selector: { text: } }
+
+# Kinboard 1.13.0-rc.6 or newer; the token needs announcements:write. A
+# doorbell set on the camera in Kinboard does this by itself — this action is
+# for everything else (motion, an alarm, a button on a dashboard).
+show_camera:
+  fields:
+    camera:         { required: true,  selector: { text: } }
+    duration:       { required: false, selector: { number: { min: 5, max: 300, unit_of_measurement: s } } }
+    target_devices: { required: false, selector: { text: { multiple: true } } }

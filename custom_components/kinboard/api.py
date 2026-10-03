@@ -9,6 +9,7 @@ will need to reimplement in another language, so the surface stays small.
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime
 from typing import Any
 
@@ -31,7 +32,15 @@ class KinboardAuthError(KinboardError):
 
     Separate from KinboardConnectionError because the config flow must react
     differently: a bad token needs reauth, an unreachable host needs a retry.
+
+    `status` keeps 401 (the token is not accepted) apart from 403 (it is, but
+    lacks the scope). The config flow treats both alike; the doorbell watcher
+    does not, because only a 403 is fixed by ticking a permission.
     """
+
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class KinboardConnectionError(KinboardError):
@@ -53,6 +62,20 @@ class KinboardRequestError(KinboardConnectionError):
     handled a 400 as one keeps doing so unchanged; the service handler is the
     one place that catches it separately.
     """
+
+
+class KinboardRateLimitError(KinboardConnectionError):
+    """Kinboard is rate limiting this call (HTTP 429).
+
+    Its own type because a 429 is expected, not a fault: show_camera allows
+    five calls per ten minutes per token, and a doorbell rung six times in a
+    row should not read as Kinboard being down. `retry_after` is the server's
+    Retry-After in seconds, when it sent one.
+    """
+
+    def __init__(self, message: str, retry_after: int | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 class KinboardClient:
@@ -98,7 +121,8 @@ class KinboardClient:
             ) as response:
                 if response.status in (401, 403):
                     raise KinboardAuthError(
-                        f"{method} {path} rejected with HTTP {response.status}"
+                        f"{method} {path} rejected with HTTP {response.status}",
+                        status=response.status,
                     )
                 if response.status == 404:
                     # A 404 on the versioned base path means this Kinboard
@@ -119,6 +143,14 @@ class KinboardClient:
                         pass
                     raise KinboardRequestError(
                         str(reason) if reason else f"{method} {path} rejected with HTTP 400"
+                    )
+                if response.status == 429:
+                    try:
+                        retry_after = int(response.headers.get("Retry-After", ""))
+                    except ValueError:
+                        retry_after = None
+                    raise KinboardRateLimitError(
+                        f"{method} {path} rate limited", retry_after=retry_after
                     )
                 response.raise_for_status()
                 if response.content_type == "application/json":
@@ -236,4 +268,54 @@ class KinboardClient:
         return await self._request(
             "POST", f"/services/{service}", json=data,
             idempotency_key=idempotency_key,
+        )
+
+    # -- cameras ----------------------------------------------------------
+
+    async def async_get_cameras(self) -> list[dict[str, Any]]:
+        """The family's cameras: id, name, and the doorbell that shows each.
+
+        Normalised so every row has all three keys. A Kinboard before
+        1.13.0-rc.7 does not send `doorbell_entity_id`, which means the same
+        as null: no doorbell. One before 1.13.0-rc.6 has no endpoint at all,
+        and the 404 surfaces as KinboardVersionError for the caller to treat
+        as "feature off".
+        """
+        payload = await self._request("GET", "/cameras")
+        rows = payload.get("cameras") if isinstance(payload, dict) else None
+        cameras: list[dict[str, Any]] = []
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, dict) or not isinstance(row.get("id"), str):
+                continue
+            bell = row.get("doorbell_entity_id")
+            cameras.append(
+                {
+                    "id": row["id"],
+                    "name": row.get("name") if isinstance(row.get("name"), str) else row["id"],
+                    "doorbell_entity_id": bell if isinstance(bell, str) and bell else None,
+                }
+            )
+        return cameras
+
+    async def async_show_camera(
+        self,
+        camera: str,
+        duration: int | None = None,
+        target_devices: list[str] | None = None,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Put a camera on the wall displays (needs `announcements:write`).
+
+        `camera` is an id or an exact name. Optional fields are left out
+        rather than sent as null, so the server's defaults apply: 60 seconds,
+        every kiosk screen. A fresh idempotency key per call unless one is
+        given: two rings are two takeovers, not a replay of the first.
+        """
+        body: dict[str, Any] = {"camera": camera}
+        if duration is not None:
+            body["duration"] = duration
+        if target_devices:
+            body["target_devices"] = list(target_devices)
+        return await self.async_call_service(
+            "show_camera", body, idempotency_key=idempotency_key or str(uuid.uuid4())
         )

@@ -14,6 +14,7 @@ RFC-001 section 7 requires that a restart of *either* system loses nothing.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import timedelta
 from typing import Any
 
@@ -23,7 +24,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import KinboardAuthError, KinboardClient, KinboardError
+from .api import KinboardAuthError, KinboardClient, KinboardError, KinboardVersionError
 from .const import (
     DEFAULT_SCAN_INTERVAL_SECONDS,
     DOMAIN,
@@ -54,6 +55,17 @@ AUTH_FAILURES_BEFORE_REAUTH = 2
 # both the coordinator and a reload.
 AUTH_FAILURE_COUNTS = "auth_failure_counts"
 
+# How long an older Kinboard (no /rewards) goes unasked before the integration
+# looks again. Not every poll -- a 404 a minute for a feature that is not
+# there -- and not never: a Kinboard updated in place gains the endpoint, and
+# the reward sensors then appear without a reload.
+REWARDS_RECHECK_SECONDS = 3600
+
+
+def _monotonic() -> float:
+    """The recheck clock. A function of its own so a test can move it."""
+    return time.monotonic()
+
 
 class KinboardCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Keeps entity state fresh and forwards Kinboard events onto the bus."""
@@ -75,6 +87,17 @@ class KinboardCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # The DoorbellWatcher for this entry, set by async_setup_entry. Hung
         # here because the coordinator is the entry's runtime_data.
         self.doorbells: Any = None
+        # Points, creatures and rewards (GET /rewards), refreshed with every
+        # poll. None until read, or while the last read failed. Kept apart
+        # from `data`, which is the summary as the server sent it.
+        self.rewards: dict[str, Any] | None = None
+        # None until the first answer; False when this Kinboard has no
+        # /rewards (1.13.0-rc.14 or older): the feature is off, quietly, and
+        # asked about again only every REWARDS_RECHECK_SECONDS.
+        self.rewards_supported: bool | None = None
+        self._rewards_failing = False
+        self._rewards_recheck_at: float | None = None
+        self._rewards_too_old_logged = False
 
     async def _load_cursor(self) -> None:
         if self._cursor_loaded:
@@ -124,7 +147,55 @@ class KinboardCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # semantics are identical either way, which is why they live here and
         # not in the transport.
         await self._pump_events()
+        await self._refresh_rewards()
         return summary
+
+    async def _refresh_rewards(self) -> None:
+        """Read points, creatures and rewards; never fails the poll.
+
+        The summary is what every other entity needs, so a Kinboard without
+        rewards, or one whose rewards cannot be read right now, must not make
+        it fail. Too old: off, said once at info level, as the doorbells do.
+        Anything else: the reward entities go unavailable until the next poll.
+        """
+        if (
+            self.rewards_supported is False
+            and self._rewards_recheck_at is not None
+            and _monotonic() < self._rewards_recheck_at
+        ):
+            return
+        try:
+            self.rewards = await self.client.async_get_rewards()
+        except KinboardVersionError:
+            if not self._rewards_too_old_logged:
+                _LOGGER.info(
+                    "This Kinboard has no points and rewards (needs a release newer than "
+                    "1.13.0-rc.14); the points, creature and reward request sensors are off"
+                )
+                self._rewards_too_old_logged = True
+            self.rewards_supported = False
+            self._rewards_recheck_at = _monotonic() + REWARDS_RECHECK_SECONDS
+            self.rewards = None
+            return
+        except KinboardError as err:
+            if not self._rewards_failing:
+                _LOGGER.warning("Could not read Kinboard's points and rewards: %s", err)
+                self._rewards_failing = True
+            else:
+                _LOGGER.debug("Could not read Kinboard's points and rewards: %s", err)
+            self.rewards = None
+            return
+        if not isinstance(self.rewards, dict):
+            self.rewards = None
+            return
+        if self._rewards_failing:
+            _LOGGER.info("Kinboard's points and rewards are readable again")
+        elif self.rewards_supported is False:
+            _LOGGER.info("This Kinboard now has points and rewards; adding their sensors")
+        self._rewards_failing = False
+        self._rewards_too_old_logged = False
+        self._rewards_recheck_at = None
+        self.rewards_supported = True
 
     async def _pump_events(self) -> None:
         for _ in range(MAX_EVENT_PAGES_PER_CYCLE):

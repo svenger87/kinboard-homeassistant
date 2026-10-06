@@ -32,6 +32,7 @@ from .api import (
     KinboardError,
     KinboardRateLimitError,
     KinboardRequestError,
+    KinboardVersionError,
 )
 from .const import (
     CONF_BASE_URL,
@@ -46,6 +47,7 @@ from .const import (
     SERVICE_CREATE_TASK,
     SERVICE_DISMISS_ATTENTION,
     SERVICE_REFRESH_INTEGRATION,
+    SERVICE_REQUEST_REWARD,
     SERVICE_REQUIRED_SCOPES,
     SERVICE_SHOW_ANNOUNCEMENT,
     SERVICE_SHOW_CAMERA,
@@ -72,6 +74,7 @@ ALL_SERVICES = (
     SERVICE_ADD_POCKET_MONEY,
     SERVICE_REFRESH_INTEGRATION,
     SERVICE_SHOW_CAMERA,
+    SERVICE_REQUEST_REWARD,
 )
 
 # Services that change nothing a sensor reports, so a call is not followed by
@@ -207,6 +210,15 @@ SERVICE_SCHEMAS: dict[str, vol.Schema] = {
             vol.Optional("target_devices"): vol.All(
                 cv.ensure_list, [cv.string], lambda refs: [r.strip() for r in refs if r.strip()]
             ),
+        }
+    ),
+    # Closed too: Kinboard reads exactly `child` and `reward`, each an id or
+    # a name. It only asks; a parent approves on Kinboard with the PIN.
+    SERVICE_REQUEST_REWARD: vol.Schema(
+        {
+            vol.Optional("entry_id"): cv.string,
+            vol.Required("child"): vol.All(cv.string, vol.Strip, vol.Length(min=1, max=200)),
+            vol.Required("reward"): vol.All(cv.string, vol.Strip, vol.Length(min=1, max=200)),
         }
     ),
 }
@@ -353,6 +365,10 @@ def _async_register_services(hass: HomeAssistant) -> None:
                     target_devices=payload.get("target_devices"),
                     idempotency_key=str(uuid.uuid4()),
                 )
+            elif call.service == SERVICE_REQUEST_REWARD:
+                await coordinator.client.async_request_reward(
+                    payload["child"], payload["reward"], idempotency_key=str(uuid.uuid4())
+                )
             else:
                 await coordinator.client.async_call_service(
                     call.service, payload, idempotency_key=str(uuid.uuid4())
@@ -372,6 +388,13 @@ def _async_register_services(hass: HomeAssistant) -> None:
                 f"Kinboard is rate limiting {call.service}: too many calls in a short "
                 f"time.{wait}"
             ) from err
+        except KinboardVersionError as err:
+            if call.service == SERVICE_REQUEST_REWARD:
+                raise HomeAssistantError(
+                    "This Kinboard cannot take reward requests yet: it needs a release "
+                    "newer than 1.13.0-rc.14. Update Kinboard."
+                ) from err
+            raise HomeAssistantError(f"Kinboard call {call.service} failed: {err}") from err
         except KinboardRequestError as err:
             hint = (
                 _OLD_SERVER_HINT

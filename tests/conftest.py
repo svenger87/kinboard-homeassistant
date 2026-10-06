@@ -92,6 +92,54 @@ SUMMARY: dict[str, Any] = {
 }
 
 
+# GET /rewards, as api.async_get_rewards hands it up: shaped like the live
+# endpoint (svenger87/kinboard#374). Mia grows with points, Ben with saved money.
+REWARDS: dict[str, Any] = {
+    "children": [
+        {
+            "person_id": "child-1",
+            "name": "Mia",
+            "points": {"balance": 110, "earned": 130, "owed": 0, "pending": 50, "available": 60},
+            "creature": {
+                "species": "dragon",
+                "stage": 2,
+                "stage_name": "Hatchling",
+                "grows_with": "points",
+                "next_stage": {"stage": 3, "stage_name": "Lizard", "at": 150, "unit": "points"},
+            },
+        },
+        {
+            "person_id": "child-2",
+            "name": "Ben",
+            "points": {"balance": 0, "earned": 0, "owed": 0, "pending": 0, "available": 0},
+            "creature": {
+                "species": "cat",
+                "stage": 4,
+                "stage_name": "Kitten",
+                "grows_with": "money",
+                "next_stage": {"stage": 5, "stage_name": "Cat", "at": 20.0, "unit": "money", "currency": "EUR"},
+            },
+        },
+    ],
+    "rewards": [
+        {"id": "reward-1", "title": "Eis", "icon": None, "cost_points": 20},
+        {"id": "reward-2", "title": "Eine Stunde Minecraft", "icon": "🎮", "cost_points": 50},
+    ],
+    "pending": [
+        {
+            "id": "req-1",
+            "person_id": "child-1",
+            "child_name": "Mia",
+            "reward_id": "reward-2",
+            "title": "Eine Stunde Minecraft",
+            "icon": "🎮",
+            "cost_points": 50,
+            "requested_at": "2026-10-06T08:00:00Z",
+        },
+    ],
+}
+
+
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations):
     """Without this, Home Assistant refuses to load anything from custom_components."""
@@ -110,6 +158,8 @@ def mock_client() -> AsyncMock:
     client.async_get_list.return_value = []
     # No doorbells unless a test gives some: the watcher then listens to nothing.
     client.async_get_cameras.return_value = []
+    # A Kinboard with points and rewards, unless a test says it is older.
+    client.async_get_rewards.return_value = REWARDS
     return client
 
 

@@ -56,4 +56,14 @@ async def async_get_config_entry_diagnostics(
         "doorbells": coordinator.doorbells.diagnostics()
         if coordinator.doorbells is not None
         else None,
+        # Counts only: names, rewards and points are the family's own.
+        "rewards": {
+            "supported": coordinator.rewards_supported,
+            "children": len(coordinator.rewards.get("children") or [])
+            if isinstance(coordinator.rewards, dict)
+            else None,
+            "pending": len(coordinator.rewards.get("pending") or [])
+            if isinstance(coordinator.rewards, dict)
+            else None,
+        },
     }

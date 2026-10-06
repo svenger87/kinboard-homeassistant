@@ -69,3 +69,11 @@ show_camera:
     camera:         { required: true,  selector: { text: } }
     duration:       { required: false, selector: { number: { min: 5, max: 300, unit_of_measurement: s } } }
     target_devices: { required: false, selector: { text: { multiple: true } } }
+
+# Kinboard newer than 1.13.0-rc.14; the token needs pocket_money:write. It
+# only asks, as the child's own "Redeem" does: a parent approves or declines
+# it on Kinboard with the settings PIN.
+request_reward:
+  fields:
+    child:  { required: true, selector: { text: } }
+    reward: { required: true, selector: { text: } }

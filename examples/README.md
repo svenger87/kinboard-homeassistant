@@ -1,6 +1,6 @@
 # Example automations
 
-[`automations.yaml`](automations.yaml) holds twelve automations you can paste
+[`automations.yaml`](automations.yaml) holds thirteen automations you can paste
 straight into your own `automations.yaml`, or into **Settings → Automations →
 ⋮ → Edit in YAML** one at a time.
 
@@ -18,7 +18,8 @@ The Kinboard half works as written. The rest is a guess about your house:
 | `notify.notify` | your notifier — `notify.mobile_app_…` |
 | `person.papa`, `zone.supermarkt` | a real person and zone |
 | `media_player.kitchen` | a speaker you own |
-| `input_button.milch_alle`, `input_button.gesehen` | any button, or a tag scan |
+| `input_button.milch_alle`, `input_button.gesehen`, `input_button.hausaufgaben_fertig` | any button, or a tag scan |
+| `Mia`, `Eine Stunde Minecraft` | your child's name and a reward from Kinboard's Settings → Creatures & rewards |
 | `sensor.waschmaschine_leistung` | your washing machine's power sensor |
 
 ## What each one shows
@@ -37,6 +38,7 @@ The Kinboard half works as written. The rest is a guess about your house:
 | 10 | A device joined the family board | a join code is a shared secret |
 | 11 | Nothing planned for tomorrow | `unknown` is deliberately not zero |
 | 12 | A button says "seen it" | `dismiss_attention` with no id dismisses the top item |
+| 13 | The homework button asks for a reward | `request_reward` **only asks**: a parent approves on Kinboard with the PIN |
 
 ## Why the event-driven ones are reliable
 

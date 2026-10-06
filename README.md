@@ -43,7 +43,7 @@ into a real Home Assistant by the test suite on every CI run.
 
 ## Requirements
 
-- **Kinboard 1.9.0 or newer**, reachable from Home Assistant — **1.13.0-rc.1 or newer** for `add_pocket_money`, `dismiss_attention` and the attention sensor's `top_key`/`items`; **1.13.0-rc.6** for `show_camera`; **1.13.0-rc.7** for [doorbells](#doorbells).
+- **Kinboard 1.9.0 or newer**, reachable from Home Assistant — **1.13.0-rc.1 or newer** for `add_pocket_money`, `dismiss_attention` and the attention sensor's `top_key`/`items`; **1.13.0-rc.6** for `show_camera`; **1.13.0-rc.7** for [doorbells](#doorbells); a release **newer than 1.13.0-rc.14** for [points, creatures and rewards](#points-creatures-and-rewards).
 - Home Assistant 2024.10 or newer.
 
 ## Install
@@ -73,6 +73,7 @@ Tick only what the integration needs. Nothing is granted by default, and **no pe
 | `tasks:write` | the task to-do list, `kinboard.create_task`, `kinboard.add_pocket_money`, `kinboard.dismiss_attention` |
 | `notes:write` | `kinboard.create_note` |
 | `announcements:write` | `kinboard.show_camera` and [doorbells](#doorbells) — shown in Kinboard as *send messages* |
+| `pocket_money:write` | `kinboard.request_reward` — it only asks; a parent approves on Kinboard with the PIN |
 
 A call made without the matching scope fails with a message that says so, rather than a bare `403`.
 
@@ -94,6 +95,9 @@ A call made without the matching scope fails with a message that says so, rather
 | `sensor.kinboard_next_waste_collection` | **which bin** goes out next | `type`, `date`, `days_until`, the next few |
 | `sensor.kinboard_<child>_pocket_money` | one per child, their balance | currency as the unit |
 | `sensor.kinboard_<child>_<goal>` | one per active saving goal, as a percentage | `saved`, `target`, `currency` |
+| `sensor.kinboard_<child>_points` | one per child with a creature, their points to spend | `earned`, `owed`, `pending`, `available`, `purchased` (with Kinboard's shop), `next_stage_threshold`, `next_stage_unit` |
+| `sensor.kinboard_<child>_creature` | the stage their creature has reached, by name ("Hatchling") | `species`, `stage` (1–8), `grows_with`, `next_stage` |
+| `sensor.kinboard_reward_requests` | how many reward requests wait for a parent | `requests` (child, reward, cost, when — at most twenty) |
 | `binary_sensor.kinboard_attention_required` | whether the board has something outstanding | `count`, `top` (its title), `top_key`, `items` (key and title, at most ten) |
 | `sensor.kinboard_display_mode` | which part of the day it is | `morning` · `afternoon` · `evening` · `quiet` |
 
@@ -113,7 +117,7 @@ Each list keeps **Kinboard's own meaning** for deletion rather than inventing a 
 
 ### Services
 
-`kinboard.add_shopping_item` · `create_task` · `create_note` · `add_pocket_money` · `dismiss_attention` · `refresh_integration` · `show_camera`.
+`kinboard.add_shopping_item` · `create_task` · `create_note` · `add_pocket_money` · `dismiss_attention` · `refresh_integration` · `show_camera` · `request_reward`.
 
 Each service shows its fields with a description under **Developer tools → Actions**.
 
@@ -156,6 +160,24 @@ data:
 ```
 
 Two more are declared and answer *"not implemented yet"* rather than *"unknown"*, so you can tell a typo from a feature that hasn't shipped: `show_announcement` and `activate_context`. Both wait on Kinboard features that do not exist yet.
+
+### Points, creatures and rewards
+
+For each child with a creature in Kinboard (**Settings → Creatures & rewards**), a **points** sensor and a **creature** sensor, and one family sensor counting the **reward requests** waiting for a parent. The points sensor's state is what the child can spend; `pending` is held by requests that are waiting, `available` is what is left for a new one, and `owed` is what was spent beyond what was earned (a task un-ticked after its points were spent). `next_stage_threshold` is in points earned, or for a creature that grows with saved money, in the account's currency (`next_stage_unit`). The creature sensor's state is the stage's name in Kinboard's language.
+
+The name a child gave their creature, and how they dressed it, stay on Kinboard's own screens: Kinboard never sends them.
+
+**`request_reward`** — asks for a reward for a child, exactly as the child's own *Redeem* does. It **only asks**: nothing is spent until a parent approves it on Kinboard with the settings PIN, and a parent may decline it. The family's phones are told. `child` is the child's name as Kinboard shows it, or their person id; `reward` the reward's title, or its id. Kinboard refuses a child without a creature, or without enough points left over after what is already waiting, and the error says which. Needs `pocket_money:write`.
+
+```yaml
+# The homework button: Mia asks for her Minecraft hour; a parent decides.
+action: kinboard.request_reward
+data:
+  child: Mia
+  reward: An hour of Minecraft
+```
+
+Needs a Kinboard release **newer than 1.13.0-rc.14**. An older Kinboard has none of this: the sensors simply don't appear, and nothing complains. No reload is needed when that changes: a child given a creature later gets their sensors on the next poll, and a Kinboard updated in place is noticed within an hour.
 
 ### Doorbells
 

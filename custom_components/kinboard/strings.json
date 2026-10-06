@@ -72,6 +72,9 @@
       },
       "waste_collection": {
         "name": "Next waste collection"
+      },
+      "reward_requests": {
+        "name": "Reward requests"
       }
     },
     "binary_sensor": {
@@ -241,6 +244,20 @@
         "target_devices": {
           "name": "Devices",
           "description": "Which Kinboard screens show it, by device ID or exact name. Leave empty for every wall display."
+        }
+      }
+    },
+    "request_reward": {
+      "name": "Request reward",
+      "description": "Asks for a reward for a child, as the child's own \"Redeem\" on Kinboard does. It only asks: nothing is spent until a parent approves it on Kinboard with the settings PIN, and a parent may decline it. The family's phones are told.",
+      "fields": {
+        "child": {
+          "name": "Child",
+          "description": "The child's name as Kinboard shows it, or their Kinboard person ID."
+        },
+        "reward": {
+          "name": "Reward",
+          "description": "The reward's title as listed in Kinboard under Settings → Creatures & rewards, or its ID."
         }
       }
     }

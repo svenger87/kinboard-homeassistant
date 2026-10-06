@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import KinboardConfigEntry
@@ -112,21 +112,41 @@ async def async_setup_entry(
             )
 
     # Points, creatures and rewards: one points and one creature sensor per
-    # child with a creature, and the family's waiting requests. Only when this
-    # Kinboard answered GET /rewards on the first poll; an older one has none
-    # of it, and then none of these entities exist rather than sitting
-    # unavailable forever. A child given a creature later appears after a
-    # reload, as a new pocket-money child does.
-    rewards = coordinator.rewards
-    if isinstance(rewards, dict):
+    # child with a creature, and the family's waiting requests -- created
+    # once Kinboard has answered GET /rewards, not before: an older Kinboard
+    # has none of it, and then none of these entities exist rather than
+    # sitting unavailable forever. Checked again after every poll, so a first
+    # read that failed, a Kinboard updated to one with rewards, or a child
+    # given a creature later all get their sensors without a reload.
+    added: set[str] = set()
+
+    @callback
+    def new_reward_entities() -> list[SensorEntity]:
+        rewards = coordinator.rewards
+        if not isinstance(rewards, dict):
+            return []
+        new: list[SensorEntity] = []
         for child in rewards.get("children") or []:
             person_id = child.get("person_id")
+            if not isinstance(person_id, str) or person_id in added:
+                continue
+            added.add(person_id)
             name = child.get("name") if isinstance(child.get("name"), str) else "?"
-            entities.append(KinboardPoints(coordinator, person_id, name))
-            entities.append(KinboardCreatureStage(coordinator, person_id, name))
-        entities.append(KinboardRewardRequests(coordinator))
+            new.append(KinboardPoints(coordinator, person_id, name))
+            new.append(KinboardCreatureStage(coordinator, person_id, name))
+        if SENSOR_REWARD_REQUESTS not in added:
+            added.add(SENSOR_REWARD_REQUESTS)
+            new.append(KinboardRewardRequests(coordinator))
+        return new
 
-    async_add_entities(entities)
+    async_add_entities([*entities, *new_reward_entities()])
+
+    @callback
+    def add_reward_entities_when_they_arrive() -> None:
+        if new := new_reward_entities():
+            async_add_entities(new)
+
+    entry.async_on_unload(coordinator.async_add_listener(add_reward_entities_when_they_arrive))
 
 
 class KinboardPocketMoney(KinboardEntity, SensorEntity):
@@ -304,7 +324,7 @@ class KinboardPoints(_KinboardChildRewardsSensor):
         if not row:
             return None
         points = row.get("points") if isinstance(row.get("points"), dict) else {}
-        attributes = {k: points.get(k) for k in ("earned", "owed", "pending", "available") if k in points}
+        attributes = {k: points.get(k) for k in ("earned", "owed", "pending", "available", "purchased") if k in points}
         creature = row.get("creature") if isinstance(row.get("creature"), dict) else {}
         nxt = creature.get("next_stage")
         # The next stage's threshold, in points earned -- or, for a creature

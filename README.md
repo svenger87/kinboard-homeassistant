@@ -95,7 +95,7 @@ A call made without the matching scope fails with a message that says so, rather
 | `sensor.kinboard_next_waste_collection` | **which bin** goes out next | `type`, `date`, `days_until`, the next few |
 | `sensor.kinboard_<child>_pocket_money` | one per child, their balance | currency as the unit |
 | `sensor.kinboard_<child>_<goal>` | one per active saving goal, as a percentage | `saved`, `target`, `currency` |
-| `sensor.kinboard_<child>_points` | one per child with a creature, their points to spend | `earned`, `owed`, `pending`, `available`, `next_stage_threshold`, `next_stage_unit` |
+| `sensor.kinboard_<child>_points` | one per child with a creature, their points to spend | `earned`, `owed`, `pending`, `available`, `purchased` (with Kinboard's shop), `next_stage_threshold`, `next_stage_unit` |
 | `sensor.kinboard_<child>_creature` | the stage their creature has reached, by name ("Hatchling") | `species`, `stage` (1–8), `grows_with`, `next_stage` |
 | `sensor.kinboard_reward_requests` | how many reward requests wait for a parent | `requests` (child, reward, cost, when — at most twenty) |
 | `binary_sensor.kinboard_attention_required` | whether the board has something outstanding | `count`, `top` (its title), `top_key`, `items` (key and title, at most ten) |
@@ -177,7 +177,7 @@ data:
   reward: An hour of Minecraft
 ```
 
-Needs a Kinboard release **newer than 1.13.0-rc.14**. An older Kinboard has none of this: the sensors simply don't appear, and nothing complains. A child given a creature later, or a Kinboard updated later, shows up after reloading the integration.
+Needs a Kinboard release **newer than 1.13.0-rc.14**. An older Kinboard has none of this: the sensors simply don't appear, and nothing complains. No reload is needed when that changes: a child given a creature later gets their sensors on the next poll, and a Kinboard updated in place is noticed within an hour.
 
 ### Doorbells
 

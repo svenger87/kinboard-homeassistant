@@ -215,6 +215,82 @@ async def test_a_failed_first_read_does_not_fail_setup(hass, config_entry, mock_
     assert hass.states.get("sensor.kinboard_next_birthday").state == "Lena Weber"
 
 
+async def test_sensors_appear_once_a_failed_first_read_succeeds_without_a_reload(
+    hass, config_entry, mock_client, caplog
+):
+    mock_client.async_get_rewards.side_effect = KinboardConnectionError("timeout")
+    await _setup_with(hass, config_entry, mock_client)
+    for key in REWARD_KEYS:
+        assert _entity_id(hass, key) is None, key
+
+    mock_client.async_get_rewards.side_effect = None
+    await _poll(hass, config_entry)
+
+    for key in REWARD_KEYS:
+        assert _entity_id(hass, key), key
+    assert _state(hass, "points_child-1").state == "110"
+    assert _state(hass, "reward_requests").state == "1"
+    # A later poll adds nothing twice: Home Assistant would refuse the
+    # duplicate, but loudly, with an error in the log on every poll.
+    caplog.clear()
+    await _poll(hass, config_entry)
+    await _poll(hass, config_entry)
+    assert not [r for r in caplog.records if "already exists" in r.getMessage()]
+    registry = er.async_get(hass)
+    ours = [e for e in er.async_entries_for_config_entry(registry, config_entry.entry_id)
+            if e.unique_id.endswith(("_reward_requests", "_points_child-1"))]
+    assert len(ours) == 2
+
+
+async def test_an_older_kinboard_updated_in_place_gains_the_sensors(hass, config_entry, mock_client):
+    """Looked at again after an hour, not on every poll, and no reload needed."""
+    from unittest.mock import patch
+
+    clock = [1000.0]
+    with patch("custom_components.kinboard.coordinator._monotonic", side_effect=lambda: clock[0]):
+        mock_client.async_get_rewards.side_effect = KinboardVersionError("/rewards not found")
+        await _setup_with(hass, config_entry, mock_client)
+        assert _entity_id(hass, "reward_requests") is None
+
+        # Kinboard is updated; within the hour it is not asked.
+        mock_client.async_get_rewards.side_effect = None
+        clock[0] += 3599
+        await _poll(hass, config_entry)
+        assert mock_client.async_get_rewards.await_count == 1
+        assert _entity_id(hass, "reward_requests") is None
+
+        clock[0] += 2
+        await _poll(hass, config_entry)
+        assert mock_client.async_get_rewards.await_count == 2
+        assert config_entry.runtime_data.rewards_supported is True
+        for key in REWARD_KEYS:
+            assert _entity_id(hass, key), key
+        assert _state(hass, "creature_stage_child-1").state == "Hatchling"
+
+
+async def test_a_child_given_a_creature_later_gets_sensors_on_the_next_poll(hass, setup_integration):
+    coordinator = setup_integration.runtime_data
+    more = deepcopy(REWARDS)
+    more["children"].append({
+        **deepcopy(REWARDS["children"][0]), "person_id": "child-3", "name": "Ida",
+    })
+    coordinator.client.async_get_rewards.return_value = more
+    await _poll(hass, setup_integration)
+    assert _state(hass, "points_child-3").state == "110"
+    assert _entity_id(hass, "points_child-3") == "sensor.kinboard_ida_points"
+
+
+async def test_shop_purchases_show_once_kinboard_sends_them(hass, setup_integration):
+    """Kinboard's shop (svenger87/kinboard#375) adds `purchased`; before it, no attribute."""
+    assert "purchased" not in _state(hass, "points_child-1").attributes
+    coordinator = setup_integration.runtime_data
+    shop = deepcopy(REWARDS)
+    shop["children"][0]["points"]["purchased"] = 30
+    coordinator.client.async_get_rewards.return_value = shop
+    await _poll(hass, setup_integration)
+    assert _state(hass, "points_child-1").attributes["purchased"] == 30
+
+
 async def test_diagnostics_count_and_never_name(hass, setup_integration):
     diagnostics = await async_get_config_entry_diagnostics(hass, setup_integration)
     assert diagnostics["rewards"] == {"supported": True, "children": 2, "pending": 1}

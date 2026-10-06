@@ -1,4 +1,4 @@
-# Twelve automations you can paste straight into automations.yaml.
+# Thirteen automations you can paste straight into automations.yaml.
 #
 # Every entity, service and event named here is part of the published contract
 # (RFC-001), and a test in this repository fails if one of them stops existing —
@@ -253,3 +253,22 @@
       data:
         title: "Kinboard"
         message: "Erledigt: {{ dismissed }}"
+
+- id: kinboard_homework_button_asks_for_a_reward
+  alias: "Kinboard: the homework button asks for a reward"
+  description: >-
+    It only asks, as the child's own "Redeem" does: the request waits in
+    Kinboard under Settings → Creatures & rewards until a parent approves it
+    with the PIN, and the parents' phones are told. Kinboard refuses it if Mia
+    does not have enough points left over. Change the button, the child and the
+    reward to yours. Needs pocket_money:write and a Kinboard newer than
+    1.13.0-rc.14.
+  mode: single
+  triggers:
+    - trigger: state
+      entity_id: input_button.hausaufgaben_fertig
+  actions:
+    - action: kinboard.request_reward
+      data:
+        child: "Mia"
+        reward: "Eine Stunde Minecraft"

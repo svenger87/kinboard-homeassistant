@@ -52,7 +52,7 @@ class KinboardVersionError(KinboardError):
 
 
 class KinboardRequestError(KinboardConnectionError):
-    """Kinboard understood the request and refused it (HTTP 400).
+    """Kinboard understood the request and refused it (HTTP 400 or 409).
 
     Carries the server's own explanation. "400 Bad Request" alone told nobody
     that the server wanted a field under a different name, which is exactly
@@ -61,7 +61,16 @@ class KinboardRequestError(KinboardConnectionError):
     A subclass of the connection error only so that every caller which already
     handled a 400 as one keeps doing so unchanged; the service handler is the
     one place that catches it separately.
+
+    A 409 is the same kind of answer: Kinboard read the request and says why it
+    will not do it now ("not enough points for that reward"). It used to fall
+    through to a bare "409 Conflict"; now it carries Kinboard's reason too.
+    `status` says which of the two it was.
     """
+
+    def __init__(self, message: str, status: int = 400) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class KinboardRateLimitError(KinboardConnectionError):
@@ -133,7 +142,7 @@ class KinboardClient:
                         f"{path} not found — this Kinboard may be older than the "
                         "Integration API"
                     )
-                if response.status == 400:
+                if response.status in (400, 409):
                     reason = None
                     try:
                         body = await response.json(content_type=None)
@@ -142,7 +151,10 @@ class KinboardClient:
                     except (ValueError, aiohttp.ClientError):
                         pass
                     raise KinboardRequestError(
-                        str(reason) if reason else f"{method} {path} rejected with HTTP 400"
+                        str(reason)
+                        if reason
+                        else f"{method} {path} rejected with HTTP {response.status}",
+                        status=response.status,
                     )
                 if response.status == 429:
                     try:
@@ -318,4 +330,48 @@ class KinboardClient:
             body["target_devices"] = list(target_devices)
         return await self.async_call_service(
             "show_camera", body, idempotency_key=idempotency_key or str(uuid.uuid4())
+        )
+
+    # -- points, creatures and rewards -------------------------------------
+
+    async def async_get_rewards(self) -> dict[str, Any]:
+        """Each child's points and creature stage, the rewards, and what waits.
+
+        Normalised to `{"children": [...], "rewards": [...], "pending": [...]}`
+        with every list present, rows that are not objects dropped. A Kinboard
+        without the endpoint answers 404, which surfaces as
+        KinboardVersionError for the caller to treat as "feature off".
+
+        The creature's own name is never in this answer: Kinboard keeps it on
+        the family's screens.
+        """
+        payload = await self._request("GET", "/rewards")
+        payload = payload if isinstance(payload, dict) else {}
+
+        def rows(key: str) -> list[dict[str, Any]]:
+            value = payload.get(key)
+            return [r for r in value if isinstance(r, dict)] if isinstance(value, list) else []
+
+        return {
+            "children": [c for c in rows("children") if isinstance(c.get("person_id"), str)],
+            "rewards": rows("rewards"),
+            "pending": rows("pending"),
+        }
+
+    async def async_request_reward(
+        self, child: str, reward: str, idempotency_key: str | None = None
+    ) -> dict[str, Any] | None:
+        """Ask for a reward for a child (needs `pocket_money:write`).
+
+        It only asks: Kinboard stores a pending request, as the child's own
+        "Redeem" does, and a parent approves or declines it on Kinboard with
+        the settings PIN. `child` is a person_id or a child's name, `reward` a
+        reward's id or title. A fresh idempotency key per call unless one is
+        given: two asks are two requests.
+        """
+        return await self._request(
+            "POST",
+            "/rewards/requests",
+            json={"child": child, "reward": reward},
+            idempotency_key=idempotency_key or str(uuid.uuid4()),
         )

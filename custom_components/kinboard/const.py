@@ -60,6 +60,14 @@ SENSOR_SAVING_GOALS: Final = "saving_goals"
 # One sensor per child, so the key is a prefix rather than a whole key.
 SENSOR_POCKET_MONEY_PREFIX: Final = "pocket_money"
 
+# Points, creatures and rewards (Kinboard newer than 1.13.0-rc.14). One points
+# sensor and one creature sensor per child with a creature, so the keys are
+# prefixes; one family sensor for the requests waiting for a parent. Read from
+# GET /rewards rather than the summary.
+SENSOR_POINTS_PREFIX: Final = "points"
+SENSOR_CREATURE_STAGE_PREFIX: Final = "creature_stage"
+SENSOR_REWARD_REQUESTS: Final = "reward_requests"
+
 BINARY_SENSOR_ATTENTION_REQUIRED: Final = "attention_required"
 
 CALENDAR_FAMILY: Final = "family"
@@ -93,6 +101,9 @@ SERVICE_ADD_POCKET_MONEY: Final = "add_pocket_money"
 SERVICE_REFRESH_INTEGRATION: Final = "refresh_integration"
 # Puts a camera on the wall displays. Kinboard 1.13.0-rc.6 and newer.
 SERVICE_SHOW_CAMERA: Final = "show_camera"
+# Asks for a reward for a child; a parent approves it on Kinboard with the
+# PIN. Kinboard newer than 1.13.0-rc.14.
+SERVICE_REQUEST_REWARD: Final = "request_reward"
 
 # Each service needs a scope on the integration token. The config flow shows
 # which scopes the supplied token is missing rather than letting the call fail
@@ -107,6 +118,7 @@ SERVICE_REQUIRED_SCOPES: Final[dict[str, str]] = {
     SERVICE_ADD_POCKET_MONEY: "tasks:write",
     SERVICE_REFRESH_INTEGRATION: "family:read",
     SERVICE_SHOW_CAMERA: "announcements:write",
+    SERVICE_REQUEST_REWARD: "pocket_money:write",
 }
 
 # --------------------------------------------------------------------------

@@ -214,3 +214,57 @@ async def test_an_auth_error_says_which_status(hass, aioclient_mock, status):
     with pytest.raises(KinboardAuthError) as caught:
         await _client(hass).async_show_camera("cam-1")
     assert caught.value.status == status
+
+
+# -- points, creatures and rewards -------------------------------------------
+
+
+async def test_rewards_are_normalised_with_every_list_present(hass, aioclient_mock):
+    aioclient_mock.get(
+        f"{API}/rewards",
+        json={
+            "children": [{"person_id": "c1", "name": "Mia", "points": {"balance": 3}}, "junk", {"name": "no id"}],
+            "rewards": [{"id": "r1", "title": "Eis", "cost_points": 20}, 7],
+            "locale": "de",
+        },
+        headers=JSON,
+    )
+    assert await _client(hass).async_get_rewards() == {
+        "children": [{"person_id": "c1", "name": "Mia", "points": {"balance": 3}}],
+        "rewards": [{"id": "r1", "title": "Eis", "cost_points": 20}],
+        "pending": [],
+    }
+
+
+async def test_rewards_survive_a_junk_body(hass, aioclient_mock):
+    aioclient_mock.get(f"{API}/rewards", json=["nope"], headers=JSON)
+    assert await _client(hass).async_get_rewards() == {"children": [], "rewards": [], "pending": []}
+
+
+async def test_no_rewards_endpoint_is_a_version_error(hass, aioclient_mock):
+    aioclient_mock.get(f"{API}/rewards", status=404)
+    with pytest.raises(KinboardVersionError):
+        await _client(hass).async_get_rewards()
+
+
+async def test_request_reward_posts_child_and_reward_with_a_key(hass, aioclient_mock):
+    aioclient_mock.post(f"{API}/rewards/requests", json={"status": "pending_approval"}, headers=JSON, status=201)
+    await _client(hass).async_request_reward("Mia", "Eis")
+    _, url, body, headers = aioclient_mock.mock_calls[-1]
+    assert str(url) == f"{API}/rewards/requests"
+    assert body == {"child": "Mia", "reward": "Eis"}
+    assert len(headers["Idempotency-Key"]) >= 8
+
+
+async def test_a_409_carries_the_servers_reason_and_says_it_was_409(hass, aioclient_mock):
+    """Not enough points is Kinboard refusing, not Kinboard being down."""
+    aioclient_mock.post(
+        f"{API}/rewards/requests",
+        status=409,
+        json={"error": "This child does not have enough points for that reward.", "code": "conflict"},
+        headers=JSON,
+    )
+    with pytest.raises(KinboardRequestError) as err:
+        await _client(hass).async_request_reward("Mia", "Kino")
+    assert str(err.value) == "This child does not have enough points for that reward."
+    assert err.value.status == 409

@@ -17,6 +17,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import KinboardConfigEntry
 from .const import (
     SENSOR_BIRTHDAYS_UPCOMING,
+    SENSOR_CREATURE_STAGE_PREFIX,
+    SENSOR_POINTS_PREFIX,
+    SENSOR_REWARD_REQUESTS,
     SENSOR_MEAL_TOMORROW,
     SENSOR_WASTE_COLLECTION,
     SENSOR_SAVING_GOALS,
@@ -107,6 +110,21 @@ async def async_setup_entry(
             entities.append(
                 KinboardSavingGoal(coordinator, str(goal.get("person") or "?"), str(goal["name"]))
             )
+
+    # Points, creatures and rewards: one points and one creature sensor per
+    # child with a creature, and the family's waiting requests. Only when this
+    # Kinboard answered GET /rewards on the first poll; an older one has none
+    # of it, and then none of these entities exist rather than sitting
+    # unavailable forever. A child given a creature later appears after a
+    # reload, as a new pocket-money child does.
+    rewards = coordinator.rewards
+    if isinstance(rewards, dict):
+        for child in rewards.get("children") or []:
+            person_id = child.get("person_id")
+            name = child.get("name") if isinstance(child.get("name"), str) else "?"
+            entities.append(KinboardPoints(coordinator, person_id, name))
+            entities.append(KinboardCreatureStage(coordinator, person_id, name))
+        entities.append(KinboardRewardRequests(coordinator))
 
     async_add_entities(entities)
 
@@ -220,3 +238,170 @@ class KinboardSensor(KinboardEntity, SensorEntity):
             return None
         payload = self._payload
         return {k: payload.get(k) for k in self.entity_description.attribute_keys if k in payload}
+
+
+# -- points, creatures and rewards ----------------------------------------
+
+# The server lists every waiting request; this many reach the attribute, so a
+# family that let fifty pile up cannot make the state an unbounded payload.
+MAX_REWARD_REQUESTS = 20
+
+
+def _child_row(coordinator, person_id: str) -> dict[str, Any] | None:
+    rewards = coordinator.rewards
+    if not isinstance(rewards, dict):
+        return None
+    for child in rewards.get("children") or []:
+        if isinstance(child, dict) and child.get("person_id") == person_id:
+            return child
+    return None
+
+
+class _KinboardChildRewardsSensor(KinboardEntity, SensorEntity):
+    """A sensor about one child, read from GET /rewards."""
+
+    def __init__(self, coordinator, prefix: str, person_id: str) -> None:
+        super().__init__(coordinator, f"{prefix}_{person_id}")
+        self._person_id = person_id
+        # Named after the child rather than translated, like pocket money.
+        self._attr_translation_key = None
+
+    def _row(self) -> dict[str, Any] | None:
+        return _child_row(self.coordinator, self._person_id)
+
+    @property
+    def available(self) -> bool:
+        # Gone from the answer (creature switched off, child removed): the
+        # entity goes unavailable rather than freezing at its last value.
+        return self.coordinator.last_update_success and self._row() is not None
+
+
+class KinboardPoints(_KinboardChildRewardsSensor):
+    """One child's points to spend.
+
+    The state is the balance, what the child can spend; the attributes say
+    how it came about and what is held. `available` is what a new request may
+    still use, the balance less what is already waiting.
+    """
+
+    _attr_native_unit_of_measurement = "points"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:star-circle"
+
+    def __init__(self, coordinator, person_id: str, name: str) -> None:
+        super().__init__(coordinator, SENSOR_POINTS_PREFIX, person_id)
+        self._attr_name = f"{name} points"
+
+    @property
+    def native_value(self) -> Any:
+        row = self._row()
+        points = row.get("points") if row else None
+        return points.get("balance") if isinstance(points, dict) else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        row = self._row()
+        if not row:
+            return None
+        points = row.get("points") if isinstance(row.get("points"), dict) else {}
+        attributes = {k: points.get(k) for k in ("earned", "owed", "pending", "available") if k in points}
+        creature = row.get("creature") if isinstance(row.get("creature"), dict) else {}
+        nxt = creature.get("next_stage")
+        # The next stage's threshold, in points earned -- or, for a creature
+        # that grows with saved money, in the account's currency.
+        attributes["next_stage_threshold"] = nxt.get("at") if isinstance(nxt, dict) else None
+        attributes["next_stage_unit"] = (
+            (nxt.get("currency") if nxt.get("unit") == "money" else nxt.get("unit"))
+            if isinstance(nxt, dict)
+            else None
+        )
+        return attributes
+
+
+class KinboardCreatureStage(_KinboardChildRewardsSensor):
+    """The stage one child's creature has reached, by its name.
+
+    The state is the stage's name as the screens show it ("Hatchling"),
+    because a wall card reads better than "2". The creature's own name, the
+    one the child gave it, is not here: Kinboard never sends it.
+    """
+
+    _attr_icon = "mdi:egg-easter"
+
+    def __init__(self, coordinator, person_id: str, name: str) -> None:
+        super().__init__(coordinator, SENSOR_CREATURE_STAGE_PREFIX, person_id)
+        self._attr_name = f"{name} creature"
+
+    def _creature(self) -> dict[str, Any]:
+        row = self._row()
+        creature = row.get("creature") if row else None
+        return creature if isinstance(creature, dict) else {}
+
+    @property
+    def native_value(self) -> Any:
+        return self._creature().get("stage_name")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        creature = self._creature()
+        if not creature:
+            return None
+        nxt = creature.get("next_stage")
+        return {
+            "species": creature.get("species"),
+            "stage": creature.get("stage"),
+            "grows_with": creature.get("grows_with"),
+            "next_stage": nxt.get("stage_name") if isinstance(nxt, dict) else None,
+        }
+
+
+class KinboardRewardRequests(KinboardEntity, SensorEntity):
+    """How many reward requests wait for a parent, and which.
+
+    The state is the count, which is what an automation triggers on ("above
+    0"). `requests` lists them -- child, reward, cost, when -- at most twenty,
+    and stays out of the recorder like the attention items: the current list
+    is useful, a history of every list is not.
+    """
+
+    _attr_icon = "mdi:gift"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _unrecorded_attributes = frozenset({"requests"})
+
+    def __init__(self, coordinator) -> None:
+        super().__init__(coordinator, SENSOR_REWARD_REQUESTS)
+
+    def _pending(self) -> list[dict[str, Any]] | None:
+        rewards = self.coordinator.rewards
+        if not isinstance(rewards, dict):
+            return None
+        return [p for p in rewards.get("pending") or [] if isinstance(p, dict)]
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.last_update_success and self._pending() is not None
+
+    @property
+    def native_value(self) -> Any:
+        pending = self._pending()
+        return len(pending) if pending is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        pending = self._pending()
+        if pending is None:
+            return None
+        return {
+            "requests": [
+                {
+                    "id": p.get("id"),
+                    "child": p.get("child_name"),
+                    "person_id": p.get("person_id"),
+                    "reward": p.get("title"),
+                    "icon": p.get("icon"),
+                    "cost_points": p.get("cost_points"),
+                    "requested_at": p.get("requested_at"),
+                }
+                for p in pending[:MAX_REWARD_REQUESTS]
+            ]
+        }

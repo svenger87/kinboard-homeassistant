@@ -32,6 +32,8 @@ CONTRACT_IDS = {
     "calendar.kinboard_family_calendar",
     "todo.kinboard_shopping_list",
     "todo.kinboard_tasks",
+    # With a Kinboard newer than 1.13.0-rc.14 (points, creatures and rewards).
+    "sensor.kinboard_reward_requests",
 }
 
 
